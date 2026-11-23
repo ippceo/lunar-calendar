@@ -72,6 +72,7 @@ fun CalendarScreen(
     onSelect: (LocalDate) -> Unit,
     onMonthChange: (Long) -> Unit,
     onJumpToMonth: (YearMonth) -> Unit,
+    onYearChange: (Int) -> Unit,
     onEditEvent: (CalEvent) -> Unit,
     onDeleteEvent: (CalEvent) -> Unit
 ) {
@@ -151,17 +152,16 @@ fun CalendarScreen(
                 onTitleClick = { showMonthPicker = true },
                 yearOnly = true
             )
+            Spacer(Modifier.height(4.dp))
+            WeekdayHeader()
             Spacer(Modifier.height(6.dp))
-            YearGrid(
+            YearPager(
                 cursor = cursor,
                 selected = selected,
                 today = today,
                 enabledEvents = enabledEvents,
                 onSelect = onSelect,
-                onOpenMonth = { month ->
-                    onJumpToMonth(month)
-                    viewMode = 0
-                }
+                onYearChange = onYearChange
             )
         }
         Spacer(Modifier.height(10.dp))
@@ -417,29 +417,69 @@ private fun WeekdayHeader() {
 }
 
 @Composable
-private fun YearGrid(
+private fun YearPager(
     cursor: YearMonth,
     selected: LocalDate,
     today: LocalDate,
     enabledEvents: List<CalEvent>,
     onSelect: (LocalDate) -> Unit,
-    onOpenMonth: (YearMonth) -> Unit
+    onYearChange: (Int) -> Unit
+) {
+    val yearCount = MAX_YEAR - MIN_YEAR + 1
+    val pager = rememberPagerState(
+        initialPage = (cursor.year - MIN_YEAR).coerceIn(0, yearCount - 1)
+    ) { yearCount }
+    LaunchedEffect(cursor.year) {
+        val target = (cursor.year - MIN_YEAR).coerceIn(0, yearCount - 1)
+        if (pager.currentPage != target) pager.scrollToPage(target)
+    }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect { page ->
+            val year = MIN_YEAR + page
+            if (year != cursor.year) onYearChange(year)
+        }
+    }
+    HorizontalPager(
+        state = pager,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(772.dp)
+    ) { page ->
+        YearGrid(
+            year = MIN_YEAR + page,
+            month = cursor.monthValue,
+            selected = selected,
+            today = today,
+            enabledEvents = enabledEvents,
+            onSelect = onSelect
+        )
+    }
+}
+
+@Composable
+private fun YearGrid(
+    year: Int,
+    month: Int,
+    selected: LocalDate,
+    today: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (pair in 0 until 4) {
+        for (row in 0 until 6) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                for (column in 0 until 3) {
-                    val month = YearMonth.of(cursor.year, pair * 3 + column + 1)
+                for (column in 0 until 2) {
+                    val index = row * 2 + column + 1
                     MiniMonth(
-                        month = month,
+                        month = YearMonth.of(year, index),
+                        highlightedMonth = month,
                         selected = selected,
                         today = today,
                         enabledEvents = enabledEvents,
                         onSelect = onSelect,
-                        onOpenMonth = onOpenMonth,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -451,11 +491,11 @@ private fun YearGrid(
 @Composable
 private fun MiniMonth(
     month: YearMonth,
+    highlightedMonth: Int,
     selected: LocalDate,
     today: LocalDate,
     enabledEvents: List<CalEvent>,
     onSelect: (LocalDate) -> Unit,
-    onOpenMonth: (YearMonth) -> Unit,
     modifier: Modifier
 ) {
     val firstDay = month.atDay(1)
@@ -467,42 +507,39 @@ private fun MiniMonth(
     val eventDays = remember(enabledEvents, month) {
         dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
     }
+    val isCurrent = month.monthValue == highlightedMonth
 
-    Column(modifier) {
+    Box(
+        modifier = modifier.height(120.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // 月份数字直接作为背景水印，不再单独占一行
         Text(
             text = "${month.monthValue}月",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable { onOpenMonth(month) }
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-        Row(Modifier.fillMaxWidth()) {
-            listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
-                Text(
-                    text = label,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    fontSize = 8.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isCurrent) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.09f)
             }
-        }
-        for (row in 0 until 6) {
-            Row(Modifier.fillMaxWidth()) {
-                for (column in 0 until 7) {
-                    val date = dates[row * 7 + column]
-                    val inMonth = date.year == month.year && date.monthValue == month.monthValue
-                    MiniDayCell(
-                        date = date,
-                        inMonth = inMonth,
-                        isSelected = date == selected,
-                        isToday = date == today,
-                        hasEvent = eventDays.contains(date),
-                        onClick = { onSelect(date) },
-                        modifier = Modifier.weight(1f)
-                    )
+        )
+        Column(Modifier.fillMaxWidth()) {
+            for (row in 0 until 6) {
+                Row(Modifier.fillMaxWidth()) {
+                    for (column in 0 until 7) {
+                        val date = dates[row * 7 + column]
+                        MiniDayCell(
+                            date = date,
+                            inMonth = date.year == month.year &&
+                                date.monthValue == month.monthValue,
+                            isSelected = date == selected,
+                            isToday = date == today,
+                            hasEvent = eventDays.contains(date),
+                            onClick = { onSelect(date) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
@@ -534,7 +571,7 @@ private fun MiniDayCell(
         }
         Box(
             modifier = Modifier
-                .size(15.dp)
+                .size(17.dp)
                 .clip(CircleShape)
                 .background(
                     if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
@@ -543,7 +580,9 @@ private fun MiniDayCell(
         ) {
             Text(
                 text = date.dayOfMonth.toString(),
-                fontSize = 9.sp,
+                fontSize = 10.sp,
+                maxLines = 1,
+                softWrap = false,
                 fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = color
             )

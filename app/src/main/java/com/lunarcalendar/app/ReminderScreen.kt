@@ -1,27 +1,32 @@
 package com.lunarcalendar.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -58,9 +64,13 @@ fun ReminderScreen(
         if (pagerState.currentPage != subTab) pagerState.animateScrollToPage(subTab)
     }
 
-    val schedule = remember(events) {
-        events.filter { it.type == EventType.ONCE }
-            .sortedWith(compareBy({ if (isExpired(it)) 1 else 0 }, { sortKey(it) }))
+    val scheduleActive = remember(events) {
+        events.filter { it.type == EventType.ONCE && !isExpired(it) }
+            .sortedBy { sortKey(it) }
+    }
+    val scheduleExpired = remember(events) {
+        events.filter { it.type == EventType.ONCE && isExpired(it) }
+            .sortedBy { sortKey(it) }
     }
     val birthdays = remember(events) {
         events.filter { it.type == EventType.YEARLY_SOLAR || it.type == EventType.YEARLY_LUNAR }
@@ -72,26 +82,50 @@ fun ReminderScreen(
     val todoItems = remember(todos) { todos.sortedForDisplay() }
 
     Column(Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = subTab) {
-            Tab(
-                selected = subTab == 0,
-                onClick = { onSubTabChange(0) },
-                text = { Text("日程") }
-            )
-            Tab(
-                selected = subTab == 1,
-                onClick = { onSubTabChange(1) },
-                text = { Text("生日") }
-            )
-            Tab(
-                selected = subTab == 2,
-                onClick = { onSubTabChange(2) },
-                text = { Text("纪念日") }
-            )
-            Tab(
-                selected = subTab == 3,
-                onClick = { onSubTabChange(3) },
-                text = { Text("待办") }
+        // 自绘 Tab：下划线位置跟随 pager 的实时拖动偏移，滑动时与手指同步
+        val fraction = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+            .coerceIn(0f, 3f)
+        val labels = listOf("日程", "生日", "纪念日", "待办")
+        Row(Modifier.fillMaxWidth()) {
+            labels.forEachIndexed { index, label ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSubTabChange(index) }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (subTab == index) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        },
+                        color = if (subTab == index) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+        }
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+        ) {
+            val tabWidth = maxWidth / labels.size
+            Box(
+                modifier = Modifier
+                    .width(tabWidth)
+                    .offset(x = tabWidth * fraction)
+                    .fillMaxHeight()
+                    .padding(horizontal = 20.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
             )
         }
 
@@ -108,7 +142,8 @@ fun ReminderScreen(
             } else {
                 ReminderList(
                     page = page,
-                    schedule = schedule,
+                    scheduleActive = scheduleActive,
+                    scheduleExpired = scheduleExpired,
                     birthdays = birthdays,
                     anniversaries = anniversaries,
                     onToggle = onToggle,
@@ -122,17 +157,20 @@ fun ReminderScreen(
 @Composable
 private fun ReminderList(
     page: Int,
-    schedule: List<CalEvent>,
+    scheduleActive: List<CalEvent>,
+    scheduleExpired: List<CalEvent>,
     birthdays: List<CalEvent>,
     anniversaries: List<CalEvent>,
     onToggle: (CalEvent, Boolean) -> Unit,
     onEdit: (CalEvent) -> Unit
 ) {
-    val list = when (page) {
-        0 -> schedule
+    val active = when (page) {
+        0 -> scheduleActive
         1 -> birthdays
         else -> anniversaries
     }
+    val expired = if (page == 0) scheduleExpired else emptyList()
+    val total = active.size + expired.size
     val title = when (page) { 0 -> "日程"; 1 -> "生日"; else -> "纪念日" }
     val emptyHint = when (page) {
         0 -> "在“日历”页点右下角“新建”，添加一次性日程。"
@@ -159,14 +197,14 @@ private fun ReminderList(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "${list.size} 条",
+                    text = "$total 条",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        if (list.isEmpty()) {
+        if (total == 0) {
             item {
                 Card(
                     Modifier.fillMaxWidth(),
@@ -185,10 +223,39 @@ private fun ReminderList(
             }
         }
 
-        items(list, key = { it.id }) { event ->
+        items(active, key = { it.id }) { event ->
             ReminderCard(
                 event = event,
-                expired = isExpired(event),
+                expired = false,
+                onToggle = { onToggle(event, it) },
+                onEdit = { onEdit(event) }
+            )
+        }
+
+        if (expired.isNotEmpty()) {
+            item(key = "expired-divider") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HorizontalDivider(Modifier.weight(1f))
+                    Text(
+                        text = "已过期",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    )
+                    HorizontalDivider(Modifier.weight(1f))
+                }
+            }
+        }
+
+        items(expired, key = { it.id }) { event ->
+            ReminderCard(
+                event = event,
+                expired = true,
                 onToggle = { onToggle(event, it) },
                 onEdit = { onEdit(event) }
             )
@@ -229,11 +296,7 @@ private fun ReminderCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = if (expired) {
-                        "已过期 · ${Occurrences.ruleText(event)} · ${event.timeText}"
-                    } else {
-                        "${Occurrences.ruleText(event)} · ${event.timeText}"
-                    },
+                    text = "${Occurrences.ruleText(event)} · ${event.timeText}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -256,7 +319,11 @@ private fun ReminderCard(
                 }
             }
             Spacer(Modifier.width(8.dp))
-            Switch(checked = event.enabled, onCheckedChange = onToggle)
+            Switch(
+                checked = event.enabled,
+                onCheckedChange = onToggle,
+                enabled = !expired
+            )
         }
     }
 }
@@ -387,11 +454,11 @@ private fun isExpired(event: CalEvent): Boolean {
     return !trigger.isAfter(now)
 }
 
+/**
+ * 排序键：始终按事件本身的日期计算，忽略启用开关，
+ * 避免用户开关提醒时列表顺序发生跳动。
+ */
 private fun sortKey(event: CalEvent): Long {
-    if (!event.enabled) return Long.MAX_VALUE
-    val next = Occurrences.nextTrigger(event) ?: return Long.MAX_VALUE - 1
-    if (event.type == EventType.ONCE && !next.isAfter(ZonedDateTime.now())) {
-        return Long.MAX_VALUE - 1
-    }
+    val next = Occurrences.nextTrigger(event.copy(enabled = true)) ?: return Long.MAX_VALUE
     return next.toInstant().toEpochMilli()
 }

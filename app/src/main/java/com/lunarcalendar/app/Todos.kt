@@ -50,7 +50,12 @@ object TodoRepository {
         return runCatching {
             val array = JSONArray(raw)
             (0 until array.length()).mapNotNull { index ->
-                array.optJSONObject(index)?.let { TodoItem.fromJson(it) }
+                array.optJSONObject(index)?.let { TodoItem.fromJson(it) }?.let {
+                    it.copy(
+                        title = it.title.take(MAX_TEXT_LENGTH),
+                        note = it.note.take(MAX_TEXT_LENGTH)
+                    )
+                }
             }
         }.getOrDefault(emptyList())
     }

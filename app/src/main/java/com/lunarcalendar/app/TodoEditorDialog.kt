@@ -77,15 +77,17 @@ fun TodoEditorDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = it.take(MAX_TEXT_LENGTH) },
                     label = { Text("待办内容，例如 交房租") },
+                    supportingText = { Text("${title.length}/$MAX_TEXT_LENGTH") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = it },
+                    onValueChange = { note = it.take(MAX_TEXT_LENGTH) },
                     label = { Text("备注（可选）") },
+                    supportingText = { Text("${note.length}/$MAX_TEXT_LENGTH") },
                     modifier = Modifier.fillMaxWidth()
                 )
 

@@ -5,6 +5,9 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.util.UUID
 
+/** 提醒名称、待办内容与备注的最大字数。 */
+const val MAX_TEXT_LENGTH = 50
+
 /** 提前提醒：在事件发生前 [daysBefore] 天的 [timeMinutes]（当天 0 点起的分钟数）提醒。 */
 data class AdvanceReminder(
     val daysBefore: Int,

@@ -90,10 +90,8 @@ class TodoWidgetProvider : AppWidgetProvider() {
         ) {
             val options = manager.getAppWidgetOptions(widgetId)
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-            val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 110)
-            // 约每 65dp 一行；4 列宽（4×4）时多显示两行，最多 6 条。
-            val rows = (minHeight / 65).coerceIn(2, 6)
-            val capacity = if (minWidth >= 250) (rows + 2).coerceAtMost(6) else rows
+            // 头部约 28dp，每行约 38dp：按可用高度自适应行数，最多 6 条
+            val capacity = ((minHeight - 28) / 38).coerceIn(2, 6)
 
             val todos = TodoRepository.load(context).sortedForDisplay()
             val pending = todos.filter { !it.done }.take(capacity)

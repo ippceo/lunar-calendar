@@ -128,8 +128,9 @@ fun EventEditorDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = it.take(MAX_TEXT_LENGTH) },
                     label = { Text("名称，例如 妈妈生日") },
+                    supportingText = { Text("${title.length}/$MAX_TEXT_LENGTH") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -344,8 +345,9 @@ fun EventEditorDialog(
 
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = it },
+                    onValueChange = { note = it.take(MAX_TEXT_LENGTH) },
                     label = { Text("备注（可选）") },
+                    supportingText = { Text("${note.length}/$MAX_TEXT_LENGTH") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

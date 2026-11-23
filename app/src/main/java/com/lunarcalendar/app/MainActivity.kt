@@ -280,6 +280,9 @@ private fun CalendarApp() {
                     onJumpToMonth = { ym ->
                         cursor = ym
                     },
+                    onYearChange = { year ->
+                        cursor = cursor.withYear(year.coerceIn(1900, 2100))
+                    },
                     onEditEvent = { event ->
                         editorTarget = EditorTarget(event, isNew = false)
                     },
