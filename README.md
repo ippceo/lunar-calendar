@@ -47,7 +47,7 @@
 2. 下载最新版本中的 `lunar-calendar-vX.Y.Z.apk`
 3. 传入手机安装（需允许“安装未知来源应用”）
 
-所有 Release 使用同一签名，后续版本可直接覆盖安装、保留数据。
+更新时请从同一 Releases 页面下载最新版本，按系统提示安装即可。
 
 `main` 分支的每次提交也会触发 Actions 构建 debug 包，仅供开发调试，不建议日常使用。
 
@@ -65,14 +65,6 @@
 - 电池策略设为「不限制」/「允许后台活动」
 
 注意：在系统设置里对 App 执行「强行停止」会清除所有已排期的闹钟，需要重新打开一次 App。
-
-## 签名与覆盖升级
-
-Release 包使用**固定的 release 签名**（CI 从 GitHub Secrets 读取 keystore），因此后续版本可以**直接覆盖安装、保留数据**，无需先卸载。
-
-- 首次从旧的 debug 包切换到 release 签名包时，仍需卸载一次（两者签名不同）。
-- 请始终下载 GitHub Releases 里的 `lunar-calendar-vX.Y.Z.apk`，不要用 Actions 里的 debug 包。
-- CI 需要的 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
 
 ## 技术实现
 
