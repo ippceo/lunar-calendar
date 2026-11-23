@@ -119,4 +119,25 @@ class LunarLogicTest {
             next
         )
     }
+
+    @Test
+    fun lunarMonthAndDayLabelsAreStable() {
+        assertEquals("十月", LunarUtils.monthLabelOf(10))
+        assertEquals("闰二月", LunarUtils.monthLabelOf(-2))
+        (1..12).forEach { m ->
+            assertTrue(LunarUtils.monthLabelOf(m).isNotEmpty())
+            assertTrue(LunarUtils.monthLabelOf(-m).startsWith("闰"))
+        }
+        assertEquals("初一", LunarUtils.dayNameOf(1))
+        assertEquals("十五", LunarUtils.dayNameOf(15))
+        (1..30).forEach { d -> assertTrue(LunarUtils.dayNameOf(d).isNotEmpty()) }
+    }
+
+    @Test
+    fun lunarRuleTextDoesNotCrashForAbsentLeapMonth() {
+        // 2024 年没有闰二月，ruleText 不应崩溃，且仍带上闰月标记
+        val text = LunarUtils.lunarRuleText(2024, -2, 1)
+        assertTrue(text.contains("闰"))
+        assertTrue(text.contains("月"))
+    }
 }

@@ -83,9 +83,31 @@ object LunarUtils {
         }.getOrNull()
     }
 
+    private val plainMonthNames: List<String> by lazy {
+        (1..12).map { m ->
+            runCatching { Lunar.fromYmd(2000, m, 1).monthInChinese }.getOrDefault(m.toString())
+        }
+    }
+
+    private val lunarDayNames: List<String> by lazy {
+        (1..30).map { d ->
+            (1998..2002).asSequence()
+                .flatMap { y -> (1..12).asSequence().map { m -> y to m } }
+                .mapNotNull { (y, m) -> runCatching { Lunar.fromYmd(y, m, d).dayInChinese }.getOrNull() }
+                .firstOrNull() ?: d.toString()
+        }
+    }
+
+    /** 农历月名（含闰月前缀），与具体年份无关：10->"十月"，-2->"闰二月"。 */
+    fun monthLabelOf(month: Int): String {
+        val name = plainMonthNames[abs(month).coerceIn(1, 12) - 1]
+        return if (month < 0) "闰${name}月" else "${name}月"
+    }
+
+    /** 农历日名，与年月无关：1->"初一"，15->"十五"，30->"三十"。 */
+    fun dayNameOf(day: Int): String = lunarDayNames[day.coerceIn(1, 30) - 1]
+
     /** 生成农历重复事件的文字描述，例如 "每年 农历十月十五"。 */
-    fun lunarRuleText(year: Int, month: Int, day: Int): String = runCatching {
-        val lunar = Lunar.fromYmd(year, month, day)
-        "每年 农历${lunar.monthInChinese}月${lunar.dayInChinese}"
-    }.getOrElse { "每年 农历" }
+    fun lunarRuleText(year: Int, month: Int, day: Int): String =
+        "每年 农历${monthLabelOf(month)}${dayNameOf(day)}"
 }
