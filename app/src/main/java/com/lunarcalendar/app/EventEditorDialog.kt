@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
@@ -107,13 +108,17 @@ fun EventEditorDialog(
                     FilterChip(
                         selected = type == EventType.ONCE,
                         onClick = { type = EventType.ONCE },
-                        label = { Text("日程") }
+                        label = { Text("日程", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                        modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = type == EventType.YEARLY_SOLAR,
                         onClick = { type = EventType.YEARLY_SOLAR },
-                        label = { Text("阳历生日") }
+                        label = { Text("阳历生日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                        modifier = Modifier.weight(1f)
                     )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = type == EventType.YEARLY_LUNAR,
                         onClick = {
@@ -124,12 +129,14 @@ fun EventEditorDialog(
                             }
                             type = EventType.YEARLY_LUNAR
                         },
-                        label = { Text("农历生日") }
+                        label = { Text("农历生日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                        modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = type == EventType.ANNIVERSARY,
                         onClick = { type = EventType.ANNIVERSARY },
-                        label = { Text("纪念日") }
+                        label = { Text("纪念日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 

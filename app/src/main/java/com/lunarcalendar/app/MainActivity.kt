@@ -171,9 +171,9 @@ private fun CalendarApp() {
             TopAppBar(
                 title = {
                     Column {
-                        Text("农历日历", fontWeight = FontWeight.SemiBold)
+                        Text("拾光历", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "离线农历 · 本地闹钟提醒",
+                            "离线农历 · 记录每个纪念日",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -250,6 +250,9 @@ private fun CalendarApp() {
                     },
                     onMonthChange = { delta ->
                         cursor = cursor.plusMonths(delta)
+                    },
+                    onJumpToMonth = { ym ->
+                        cursor = ym
                     },
                     onAddEvent = {
                         editorTarget = EditorTarget(

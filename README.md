@@ -1,4 +1,4 @@
-# 农历日历（Lunar Calendar）
+# 拾光历（Lunar Calendar）
 
 一个完全离线的 Android 日历 App：查看公历 + 农历、创建日程、阳历/农历生日与纪念日提醒，并提供桌面 2×2 小组件。
 

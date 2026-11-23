@@ -20,9 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -31,8 +34,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +62,7 @@ fun CalendarScreen(
     events: List<CalEvent>,
     onSelect: (LocalDate) -> Unit,
     onMonthChange: (Long) -> Unit,
+    onJumpToMonth: (YearMonth) -> Unit,
     onAddEvent: () -> Unit,
     onEditEvent: (CalEvent) -> Unit,
     onDeleteEvent: (CalEvent) -> Unit
@@ -68,13 +78,19 @@ fun CalendarScreen(
         dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
     }
 
+    var showMonthPicker by rememberSaveable { mutableStateOf(false) }
+
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp)
     ) {
-        MonthSwitcher(cursor = cursor, onMonthChange = onMonthChange)
+        MonthSwitcher(
+            cursor = cursor,
+            onMonthChange = onMonthChange,
+            onTitleClick = { showMonthPicker = true }
+        )
         WeekdayHeader()
         Spacer(Modifier.height(2.dp))
         MonthGrid(
@@ -95,10 +111,25 @@ fun CalendarScreen(
         )
         Spacer(Modifier.height(96.dp))
     }
+
+    if (showMonthPicker) {
+        MonthYearPickerDialog(
+            current = cursor,
+            onDismiss = { showMonthPicker = false },
+            onPick = { ym ->
+                onJumpToMonth(ym)
+                showMonthPicker = false
+            }
+        )
+    }
 }
 
 @Composable
-private fun MonthSwitcher(cursor: YearMonth, onMonthChange: (Long) -> Unit) {
+private fun MonthSwitcher(
+    cursor: YearMonth,
+    onMonthChange: (Long) -> Unit,
+    onTitleClick: () -> Unit
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -108,17 +139,102 @@ private fun MonthSwitcher(cursor: YearMonth, onMonthChange: (Long) -> Unit) {
         IconButton(onClick = { onMonthChange(-1) }) {
             Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上个月")
         }
-        Text(
-            text = "${cursor.year}年${cursor.monthValue}月",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f)
-        )
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onTitleClick)
+                .padding(vertical = 6.dp)
+        ) {
+            Text(
+                text = "${cursor.year}年${cursor.monthValue}月",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = "选择年月",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         IconButton(onClick = { onMonthChange(1) }) {
             Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下个月")
         }
     }
+}
+
+/**
+ * 年月快速跳转：点月份直接跳转，支持逐年切换与「今年」快捷回到当前年。
+ */
+@Composable
+private fun MonthYearPickerDialog(
+    current: YearMonth,
+    onDismiss: () -> Unit,
+    onPick: (YearMonth) -> Unit
+) {
+    var year by remember { mutableIntStateOf(current.year) }
+    val thisYear = YearMonth.now().year
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("跳转到年月") },
+        text = {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(onClick = { year -= 1 }) {
+                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上一年")
+                    }
+                    TextButton(onClick = { year = thisYear }) {
+                        Text(
+                            text = "$year 年",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = { year += 1 }) {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下一年")
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                for (row in 0 until 3) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (col in 0 until 4) {
+                            val month = row * 4 + col + 1
+                            val isCurrent = year == current.year && month == current.monthValue
+                            OutlinedButton(
+                                onClick = { onPick(YearMonth.of(year, month)) },
+                                modifier = Modifier.weight(1f),
+                                colors = if (isCurrent) {
+                                    ButtonDefaults.outlinedButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                } else {
+                                    ButtonDefaults.outlinedButtonColors()
+                                }
+                            ) {
+                                Text("$month 月")
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable

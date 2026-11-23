@@ -4,16 +4,19 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 月牙：大圆减去左上偏移的小圆，形成开口朝右上的弯月 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M34,34h40a8,8 0,0 1,8 8v34a8,8 0,0 1,-8 8H34a8,8 0,0 1,-8 -8V42a8,8 0,0 1,8 -8z" />
-    <path
-        android:fillColor="#B3261E"
-        android:pathData="M26,48h56v10H26z" />
+        android:fillType="evenOdd"
+        android:pathData="M56,30 a24,24 0 1,0 0,48 a24,24 0 1,0 0,-48 z M63,34 a14,14 0 1,0 0,28 a14,14 0 1,0 0,-28 z" />
+    <!-- 星点 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,26h6v16h-6zM64,26h6v16h-6z" />
+        android:pathData="M77,71 a3,3 0 1,0 0,6 a3,3 0 1,0 0,-6 z" />
     <path
-        android:fillColor="#B3261E"
-        android:pathData="M42,66h24v7H42z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M84,61 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,83 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4 z" />
 </vector>
