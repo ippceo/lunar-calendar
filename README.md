@@ -43,6 +43,14 @@
 
 注意：在系统设置里对 App 执行「强行停止」会清除所有已排期的闹钟，需要重新打开一次 App。
 
+## 签名与覆盖升级
+
+Release 包使用**固定的 release 签名**（CI 从 GitHub Secrets 读取 keystore），因此后续版本可以**直接覆盖安装、保留数据**，无需先卸载。
+
+- 首次从旧的 debug 包切换到 release 签名包时，仍需卸载一次（两者签名不同）。
+- 请始终下载 GitHub Releases 里的 `lunar-calendar-vX.Y.Z.apk`，不要用 Actions 里的 debug 包。
+- CI 需要的 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
+
 ## 技术实现
 
 - Kotlin + Jetpack Compose（Material 3）
