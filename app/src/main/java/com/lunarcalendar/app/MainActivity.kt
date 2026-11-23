@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import java.time.YearMonth
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppSettings.applyExcludeFromRecents(this)
         enableEdgeToEdge()
         setContent {
             LunarCalendarTheme {
@@ -182,6 +184,12 @@ private fun CalendarApp() {
                     icon = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     label = { Text("提醒") }
                 )
+                NavigationBarItem(
+                    selected = tab == 2,
+                    onClick = { tab = 2 },
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                    label = { Text("设置") }
+                )
             }
         },
         floatingActionButton = {
@@ -242,16 +250,21 @@ private fun CalendarApp() {
                         persist(events.filterNot { it.id == event.id })
                     }
                 )
-            } else {
+            } else if (tab == 1) {
                 ReminderScreen(
                     events = events,
-                    permissionTick = permissionTick,
                     onToggle = { event, enabled ->
                         persist(events.map { if (it.id == event.id) it.copy(enabled = enabled) else it })
                     },
                     onEdit = { event ->
                         editorTarget = EditorTarget(event, isNew = false)
                     }
+                )
+            } else {
+                SettingsScreen(
+                    events = events,
+                    permissionTick = permissionTick,
+                    onSaveAll = { persist(it) }
                 )
             }
         }
