@@ -24,10 +24,23 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 }
 
+/** 待办闹钟到点：发本地通知。 */
+class TodoReminderReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val todoId = intent.getStringExtra(EXTRA_TODO_ID) ?: return
+        val todo = TodoRepository.load(context).firstOrNull { it.id == todoId } ?: return
+        if (todo.done) return
+        Notifications.showTodo(context, todo)
+        com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
+    }
+}
+
 /** 开机、改系统时间、时区变化、重装更新后重新排期所有提醒。 */
 class RescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Notifications.ensureChannel(context)
         ReminderScheduler.rescheduleAll(context, EventRepository.load(context))
+        TodoScheduler.rescheduleAll(context, TodoRepository.load(context))
+        com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
     }
 }

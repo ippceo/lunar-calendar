@@ -29,6 +29,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".TodoReminderReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".RescheduleReceiver"
             android:exported="true">
             <intent-filter>
@@ -59,6 +63,21 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ui.widget.TodoWidgetProvider"
+            android:exported="true"
+            android:label="@string/todo_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.lunarcalendar.app.action.TODO_REFRESH" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_todo_info" />
         </receiver>
     </application>
 

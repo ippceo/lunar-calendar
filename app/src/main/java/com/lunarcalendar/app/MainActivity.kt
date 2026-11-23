@@ -113,6 +113,7 @@ private fun CalendarApp() {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var events by remember { mutableStateOf(EventRepository.load(context)) }
+    var todos by remember { mutableStateOf(TodoRepository.load(context)) }
     var today by rememberSaveable(stateSaver = LocalDateSaver) {
         mutableStateOf(LocalDate.now())
     }
@@ -123,7 +124,9 @@ private fun CalendarApp() {
         mutableStateOf(YearMonth.from(today))
     }
     var tab by rememberSaveable { mutableStateOf(0) }
+    var reminderSubTab by rememberSaveable { mutableIntStateOf(0) }
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
+    var todoEditorTarget by remember { mutableStateOf<TodoEditorTarget?>(null) }
     var permissionTick by remember { mutableIntStateOf(0) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -133,7 +136,9 @@ private fun CalendarApp() {
     fun refreshFromStore() {
         today = LocalDate.now()
         events = EventRepository.load(context)
+        todos = TodoRepository.load(context)
         ReminderScheduler.rescheduleAll(context, events)
+        TodoScheduler.rescheduleAll(context, todos)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -149,6 +154,7 @@ private fun CalendarApp() {
 
     LaunchedEffect(Unit) {
         ReminderScheduler.rescheduleAll(context, events)
+        TodoScheduler.rescheduleAll(context, todos)
         val needsPermission = Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 context,
@@ -166,14 +172,21 @@ private fun CalendarApp() {
         com.lunarcalendar.app.ui.widget.LunarWidgetProvider.forceRefreshAll(context)
     }
 
+    fun persistTodos(updated: List<TodoItem>) {
+        todos = updated
+        TodoRepository.save(context, updated)
+        TodoScheduler.rescheduleAll(context, updated)
+        com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("拾光历", fontWeight = FontWeight.SemiBold)
+                        Text("拾光", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "离线农历 · 记录每个纪念日",
+                            "记住每一个值得的日子",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -230,6 +243,14 @@ private fun CalendarApp() {
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text("新建") }
                 )
+            } else if (tab == 1 && reminderSubTab == 3) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        todoEditorTarget = TodoEditorTarget(TodoItem(title = ""), isNew = true)
+                    },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("新建待办") }
+                )
             }
         }
     ) { innerPadding ->
@@ -264,18 +285,28 @@ private fun CalendarApp() {
             } else if (tab == 1) {
                 ReminderScreen(
                     events = events,
+                    todos = todos,
+                    subTab = reminderSubTab,
+                    onSubTabChange = { reminderSubTab = it },
                     onToggle = { event, enabled ->
                         persist(events.map { if (it.id == event.id) it.copy(enabled = enabled) else it })
                     },
                     onEdit = { event ->
                         editorTarget = EditorTarget(event, isNew = false)
+                    },
+                    onToggleTodo = { todo, done ->
+                        persistTodos(todos.map { if (it.id == todo.id) it.copy(done = done) else it })
+                    },
+                    onEditTodo = { todo ->
+                        todoEditorTarget = TodoEditorTarget(todo, isNew = false)
                     }
                 )
             } else {
                 SettingsScreen(
                     events = events,
+                    todos = todos,
                     permissionTick = permissionTick,
-                    onSaveAll = { persist(it) }
+                    onSaveAll = { newEvents, newTodos -> persist(newEvents); persistTodos(newTodos) }
                 )
             }
         }
@@ -298,6 +329,27 @@ private fun CalendarApp() {
             onDelete = { event ->
                 editorTarget = null
                 persist(events.filterNot { it.id == event.id })
+            }
+        )
+    }
+
+    val todoTarget = todoEditorTarget
+    if (todoTarget != null) {
+        TodoEditorDialog(
+            target = todoTarget,
+            onDismiss = { todoEditorTarget = null },
+            onSave = { saved ->
+                todoEditorTarget = null
+                val updated = if (todoTarget.isNew) {
+                    todos + saved
+                } else {
+                    todos.map { if (it.id == saved.id) saved else it }
+                }
+                persistTodos(updated)
+            },
+            onDelete = { todo ->
+                todoEditorTarget = null
+                persistTodos(todos.filterNot { it.id == todo.id })
             }
         )
     }

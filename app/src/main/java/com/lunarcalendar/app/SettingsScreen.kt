@@ -45,15 +45,16 @@ import androidx.core.app.NotificationManagerCompat
 @Composable
 fun SettingsScreen(
     events: List<CalEvent>,
+    todos: List<TodoItem>,
     permissionTick: Int,
-    onSaveAll: (List<CalEvent>) -> Unit
+    onSaveAll: (List<CalEvent>, List<TodoItem>) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item { ReliabilityCard(permissionTick) }
-        item { DataBackupCard(events, onSaveAll) }
+        item { DataBackupCard(events, todos, onSaveAll) }
     }
 }
 
@@ -135,17 +136,21 @@ private fun ReliabilityCard(permissionTick: Int) {
 }
 
 @Composable
-private fun DataBackupCard(events: List<CalEvent>, onSaveAll: (List<CalEvent>) -> Unit) {
+private fun DataBackupCard(
+    events: List<CalEvent>,
+    todos: List<TodoItem>,
+    onSaveAll: (List<CalEvent>, List<TodoItem>) -> Unit
+) {
     val context = LocalContext.current
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val ok = DataBackup.writeToUri(context, uri, DataBackup.exportJson(events))
+        val ok = DataBackup.writeToUri(context, uri, DataBackup.exportJson(events, todos))
         Toast.makeText(
             context,
-            if (ok) "已导出 ${events.size} 条提醒到文件" else "导出失败",
+            if (ok) "已导出 ${events.size} 条提醒、${todos.size} 条待办" else "导出失败",
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -160,8 +165,15 @@ private fun DataBackupCard(events: List<CalEvent>, onSaveAll: (List<CalEvent>) -
             Toast.makeText(context, "导入失败：不是有效的备份文件", Toast.LENGTH_LONG).show()
             return@rememberLauncherForActivityResult
         }
-        onSaveAll(DataBackup.merge(events, imported))
-        Toast.makeText(context, "已导入 ${imported.size} 条提醒", Toast.LENGTH_SHORT).show()
+        onSaveAll(
+            DataBackup.merge(events, imported.events),
+            DataBackup.mergeTodos(todos, imported.todos)
+        )
+        Toast.makeText(
+            context,
+            "已导入 ${imported.events.size} 条提醒、${imported.todos.size} 条待办",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     Card(Modifier.fillMaxWidth()) {
@@ -173,7 +185,7 @@ private fun DataBackupCard(events: List<CalEvent>, onSaveAll: (List<CalEvent>) -
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "把所有日程、生日和纪念日导出成一个文件，换手机后在新设备上导入即可恢复。导入按名称自动去重，同一条不会重复。",
+                text = "把所有日程、生日、纪念日和待办导出成一个文件，换手机后在新设备上导入即可恢复。导入按 id 合并，同一条不会重复。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -193,7 +205,7 @@ private fun DataBackupCard(events: List<CalEvent>, onSaveAll: (List<CalEvent>) -
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "当前共 ${events.size} 条提醒",
+                text = "当前共 ${events.size} 条提醒、${todos.size} 条待办",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

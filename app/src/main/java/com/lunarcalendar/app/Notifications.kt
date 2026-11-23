@@ -80,4 +80,49 @@ object Notifications {
             NotificationManagerCompat.from(context).notify(event.id, 0, notification)
         }
     }
+
+    fun showTodo(context: Context, todo: TodoItem) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ensureChannel(context)
+        val due = todo.dueAt
+        val detail = buildString {
+            if (due != null) append("${due.monthValue}月${due.dayOfMonth}日 %02d:%02d".format(due.hour, due.minute))
+            if (todo.note.isNotBlank()) {
+                if (isNotEmpty()) append("\n")
+                append(todo.note)
+            }
+        }
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(todo.title.ifBlank { "待办提醒" })
+            .setContentText("待办到时间了")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detail.ifBlank { "待办到时间了" }))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(contentIntent)
+            .build()
+
+        runCatching {
+            NotificationManagerCompat.from(context).notify("todo:${todo.id}", 0, notification)
+        }
+    }
 }

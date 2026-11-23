@@ -9,14 +9,14 @@
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:pathData="M56,30 a24,24 0 1,0 0,48 a24,24 0 1,0 0,-48 z M63,34 a14,14 0 1,0 0,28 a14,14 0 1,0 0,-28 z" />
-    <!-- 星点 -->
+    <!-- 星点：四角星形 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M77,71 a3,3 0 1,0 0,6 a3,3 0 1,0 0,-6 z" />
+        android:pathData="M78,66.5 Q80.2,70.8 84.5,73 Q80.2,75.2 78,79.5 Q75.8,75.2 71.5,73 Q75.8,70.8 78,66.5 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M84,61 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4 z" />
+        android:pathData="M88,57.8 Q89.4,60.6 92.2,62 Q89.4,63.4 88,66.2 Q86.6,63.4 83.8,62 Q86.6,60.6 88,57.8 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M70,83 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4 z" />
+        android:pathData="M70,80.6 Q71.15,82.85 73.4,84 Q71.15,85.15 70,87.4 Q68.85,85.15 66.6,84 Q68.85,82.85 70,80.6 Z" />
 </vector>

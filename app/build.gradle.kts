@@ -12,8 +12,8 @@ android {
         applicationId = "com.lunarcalendar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.6"
+        versionCode = 10
+        versionName = "1.2.7"
     }
 
     signingConfigs {
@@ -77,6 +77,8 @@ dependencies {
     implementation("cn.6tail:lunar:1.7.8")
 
     testImplementation("junit:junit:4.13.2")
+    // 单元测试里提供真实的 org.json 实现（android.jar 中只有会抛异常的桩）
+    testImplementation("org.json:json:20240303")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
