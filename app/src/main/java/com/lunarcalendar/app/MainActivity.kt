@@ -270,7 +270,12 @@ private fun CalendarApp() {
                         cursor = YearMonth.from(date)
                     },
                     onMonthChange = { delta ->
-                        cursor = cursor.plusMonths(delta)
+                        val next = cursor.plusMonths(delta)
+                        cursor = when {
+                            next.year < 1900 -> YearMonth.of(1900, 1)
+                            next.year > 2100 -> YearMonth.of(2100, 12)
+                            else -> next
+                        }
                     },
                     onJumpToMonth = { ym ->
                         cursor = ym

@@ -5,6 +5,7 @@ import android.app.TimePickerDialog
 import android.view.ViewGroup
 import android.widget.NumberPicker
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,9 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +45,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
 
 data class EditorTarget(val event: CalEvent, val isNew: Boolean)
+
+private fun typeName(type: EventType): String = when (type) {
+    EventType.ONCE -> "日程"
+    EventType.YEARLY_SOLAR -> "阳历生日"
+    EventType.YEARLY_LUNAR -> "农历生日"
+    EventType.ANNIVERSARY -> "纪念日"
+}
 
 @Composable
 fun EventEditorDialog(
@@ -79,6 +90,7 @@ fun EventEditorDialog(
     var timeMinutes by remember(original.id) { mutableIntStateOf(original.timeMinutes) }
     var note by remember(original.id) { mutableStateOf(original.note) }
     var enabled by remember(original.id) { mutableStateOf(original.enabled) }
+    var typeMenu by remember(original.id) { mutableStateOf(false) }
 
     val pending = if (type == EventType.YEARLY_LUNAR) {
         original.copy(
@@ -122,43 +134,51 @@ fun EventEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = type == EventType.ONCE,
-                        onClick = { type = EventType.ONCE },
-                        label = { Text("日程", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = type == EventType.YEARLY_SOLAR,
-                        onClick = { type = EventType.YEARLY_SOLAR },
-                        label = { Text("阳历生日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                        modifier = Modifier.weight(1f)
-                    )
+                Box {
+                    OutlinedButton(
+                        onClick = { typeMenu = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = typeName(type),
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start
+                        )
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择类型")
+                    }
+                    DropdownMenu(
+                        expanded = typeMenu,
+                        onDismissRequest = { typeMenu = false }
+                    ) {
+                        listOf(
+                            EventType.ONCE to "日程",
+                            EventType.YEARLY_SOLAR to "阳历生日",
+                            EventType.YEARLY_LUNAR to "农历生日",
+                            EventType.ANNIVERSARY to "纪念日"
+                        ).forEach { (candidate, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                trailingIcon = {
+                                    if (type == candidate) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    if (candidate == EventType.YEARLY_LUNAR &&
+                                        type != EventType.YEARLY_LUNAR
+                                    ) {
+                                        val li = LunarUtils.info(date)
+                                        lunarYear = li.lunarYear
+                                        lunarMonth = li.lunarMonth
+                                        lunarDay = li.lunarDay
+                                    }
+                                    type = candidate
+                                    typeMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = type == EventType.YEARLY_LUNAR,
-                        onClick = {
-                            if (type != EventType.YEARLY_LUNAR) {
-                                val li = LunarUtils.info(date)
-                                lunarYear = li.lunarYear
-                                lunarMonth = li.lunarMonth
-                                lunarDay = li.lunarDay
-                            }
-                            type = EventType.YEARLY_LUNAR
-                        },
-                        label = { Text("农历生日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = type == EventType.ANNIVERSARY,
-                        onClick = { type = EventType.ANNIVERSARY },
-                        label = { Text("纪念日", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
                 Text(
                     text = when (type) {
                         EventType.ONCE -> "只在这个日期提醒一次"

@@ -24,12 +24,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,6 +102,9 @@ fun CalendarScreen(
     }
 
     var showMonthPicker by rememberSaveable { mutableStateOf(false) }
+    var viewMode by rememberSaveable { mutableIntStateOf(0) } // 0 = 月视图, 1 = 年视图
+    var showAdjacent by rememberSaveable { mutableStateOf(false) }
+    var viewMenu by rememberSaveable { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -106,26 +112,56 @@ fun CalendarScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp)
     ) {
-        MonthSwitcher(
-            cursor = cursor,
-            onMonthChange = onMonthChange,
-            onTitleClick = { showMonthPicker = true }
+        ViewModeBar(
+            yearMode = viewMode == 1,
+            showAdjacent = showAdjacent,
+            menuOpen = viewMenu,
+            onMenuOpenChange = { viewMenu = it },
+            onModeChange = { viewMode = it },
+            onToggleAdjacent = { showAdjacent = !showAdjacent }
         )
-        WeekdayHeader()
-        Spacer(Modifier.height(2.dp))
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp * 6)
-        ) { page ->
-            val pageMonth = startMonth.plusMonths(page.toLong())
-            MonthPage(
-                cursor = pageMonth,
+        if (viewMode == 0) {
+            MonthSwitcher(
+                cursor = cursor,
+                onMonthChange = onMonthChange,
+                onTitleClick = { showMonthPicker = true }
+            )
+            WeekdayHeader()
+            Spacer(Modifier.height(2.dp))
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp * 6)
+            ) { page ->
+                val pageMonth = startMonth.plusMonths(page.toLong())
+                MonthPage(
+                    cursor = pageMonth,
+                    selected = selected,
+                    today = today,
+                    enabledEvents = enabledEvents,
+                    showAdjacent = showAdjacent,
+                    onSelect = onSelect
+                )
+            }
+        } else {
+            MonthSwitcher(
+                cursor = cursor,
+                onMonthChange = onMonthChange,
+                onTitleClick = { showMonthPicker = true },
+                yearOnly = true
+            )
+            Spacer(Modifier.height(6.dp))
+            YearGrid(
+                cursor = cursor,
                 selected = selected,
                 today = today,
                 enabledEvents = enabledEvents,
-                onSelect = onSelect
+                onSelect = onSelect,
+                onOpenMonth = { month ->
+                    onJumpToMonth(month)
+                    viewMode = 0
+                }
             )
         }
         Spacer(Modifier.height(10.dp))
@@ -151,19 +187,93 @@ fun CalendarScreen(
 }
 
 @Composable
+private fun ViewModeBar(
+    yearMode: Boolean,
+    showAdjacent: Boolean,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onModeChange: (Int) -> Unit,
+    onToggleAdjacent: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onMenuOpenChange(true) }
+                    .padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (yearMode) "年视图" else "月视图",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    Icons.Filled.ArrowDropDown,
+                    contentDescription = "切换视图",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { onMenuOpenChange(false) }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("月视图") },
+                    trailingIcon = {
+                        if (!yearMode) Icon(Icons.Filled.Check, contentDescription = null)
+                    },
+                    onClick = {
+                        onModeChange(0)
+                        onMenuOpenChange(false)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("年视图") },
+                    trailingIcon = {
+                        if (yearMode) Icon(Icons.Filled.Check, contentDescription = null)
+                    },
+                    onClick = {
+                        onModeChange(1)
+                        onMenuOpenChange(false)
+                    }
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("显示相邻月份日期") },
+                    trailingIcon = {
+                        if (showAdjacent) Icon(Icons.Filled.Check, contentDescription = null)
+                    },
+                    onClick = onToggleAdjacent
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MonthSwitcher(
     cursor: YearMonth,
     onMonthChange: (Long) -> Unit,
-    onTitleClick: () -> Unit
+    onTitleClick: () -> Unit,
+    yearOnly: Boolean = false
 ) {
+    val step = if (yearOnly) 12L else 1L
     Row(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { onMonthChange(-1) }) {
-            Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上个月")
+        IconButton(onClick = { onMonthChange(-step) }) {
+            Icon(
+                Icons.Filled.KeyboardArrowLeft,
+                contentDescription = if (yearOnly) "上一年" else "上个月"
+            )
         }
         Row(
             horizontalArrangement = Arrangement.Center,
@@ -175,7 +285,7 @@ private fun MonthSwitcher(
                 .padding(vertical = 6.dp)
         ) {
             Text(
-                text = "${cursor.year}年${cursor.monthValue}月",
+                text = if (yearOnly) "${cursor.year}年" else "${cursor.year}年${cursor.monthValue}月",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
@@ -186,8 +296,11 @@ private fun MonthSwitcher(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        IconButton(onClick = { onMonthChange(1) }) {
-            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下个月")
+        IconButton(onClick = { onMonthChange(step) }) {
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = if (yearOnly) "下一年" else "下个月"
+            )
         }
     }
 }
@@ -284,7 +397,7 @@ private const val MAX_YEAR = 2100
 
 @Composable
 private fun WeekdayHeader() {
-    val labels = listOf("日", "一", "二", "三", "四", "五", "六")
+    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
     Row(Modifier.fillMaxWidth()) {
         labels.forEachIndexed { index, label ->
             Text(
@@ -293,11 +406,156 @@ private fun WeekdayHeader() {
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
-                color = if (index == 0 || index == 6) {
+                color = if (index >= 5) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun YearGrid(
+    cursor: YearMonth,
+    selected: LocalDate,
+    today: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit,
+    onOpenMonth: (YearMonth) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (pair in 0 until 4) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (column in 0 until 3) {
+                    val month = YearMonth.of(cursor.year, pair * 3 + column + 1)
+                    MiniMonth(
+                        month = month,
+                        selected = selected,
+                        today = today,
+                        enabledEvents = enabledEvents,
+                        onSelect = onSelect,
+                        onOpenMonth = onOpenMonth,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniMonth(
+    month: YearMonth,
+    selected: LocalDate,
+    today: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit,
+    onOpenMonth: (YearMonth) -> Unit,
+    modifier: Modifier
+) {
+    val firstDay = month.atDay(1)
+    val leading = firstDay.dayOfWeek.value - 1
+    val dates = remember(month) {
+        val start = firstDay.minusDays(leading.toLong())
+        (0 until 42).map { start.plusDays(it.toLong()) }
+    }
+    val eventDays = remember(enabledEvents, month) {
+        dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
+    }
+
+    Column(modifier) {
+        Text(
+            text = "${month.monthValue}月",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { onOpenMonth(month) }
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+        Row(Modifier.fillMaxWidth()) {
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontSize = 8.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+        for (row in 0 until 6) {
+            Row(Modifier.fillMaxWidth()) {
+                for (column in 0 until 7) {
+                    val date = dates[row * 7 + column]
+                    val inMonth = date.year == month.year && date.monthValue == month.monthValue
+                    MiniDayCell(
+                        date = date,
+                        inMonth = inMonth,
+                        isSelected = date == selected,
+                        isToday = date == today,
+                        hasEvent = eventDays.contains(date),
+                        onClick = { onSelect(date) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniDayCell(
+    date: LocalDate,
+    inMonth: Boolean,
+    isSelected: Boolean,
+    isToday: Boolean,
+    hasEvent: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(20.dp)
+            .clickable(enabled = inMonth && !isSelected, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!inMonth) return@Box
+        val color = when {
+            isSelected -> MaterialTheme.colorScheme.onPrimary
+            isToday -> MaterialTheme.colorScheme.primary
+            date.dayOfWeek.value >= 6 -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+        Box(
+            modifier = Modifier
+                .size(15.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = date.dayOfMonth.toString(),
+                fontSize = 9.sp,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = color
+            )
+        }
+        if (hasEvent && !isSelected) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 1.dp)
+                    .size(3.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
             )
         }
     }
@@ -309,15 +567,17 @@ private fun MonthPage(
     selected: LocalDate,
     today: LocalDate,
     enabledEvents: List<CalEvent>,
+    showAdjacent: Boolean,
     onSelect: (LocalDate) -> Unit
 ) {
     val firstDay = cursor.atDay(1)
-    val leading = firstDay.dayOfWeek.value % 7
+    // 一周从周一开始：周一 = 0 … 周日 = 6
+    val leading = firstDay.dayOfWeek.value - 1
     val dates = remember(cursor) {
         val start = firstDay.minusDays(leading.toLong())
         (0 until 42).map { start.plusDays(it.toLong()) }
     }
-    val eventDays = remember(enabledEvents, cursor) {
+    val eventDays = remember(enabledEvents, cursor, showAdjacent) {
         dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
     }
     MonthGrid(
@@ -326,6 +586,7 @@ private fun MonthPage(
         selected = selected,
         today = today,
         eventDays = eventDays,
+        showAdjacent = showAdjacent,
         onSelect = onSelect
     )
 }
@@ -337,6 +598,7 @@ private fun MonthGrid(
     selected: LocalDate,
     today: LocalDate,
     eventDays: Set<LocalDate>,
+    showAdjacent: Boolean,
     onSelect: (LocalDate) -> Unit
 ) {
     Column {
@@ -347,6 +609,7 @@ private fun MonthGrid(
                     DayCell(
                         date = date,
                         inMonth = date.year == cursor.year && date.monthValue == cursor.monthValue,
+                        showAdjacent = showAdjacent,
                         isSelected = date == selected,
                         isToday = date == today,
                         hasEvent = eventDays.contains(date),
@@ -363,12 +626,22 @@ private fun MonthGrid(
 private fun DayCell(
     date: LocalDate,
     inMonth: Boolean,
+    showAdjacent: Boolean,
     isSelected: Boolean,
     isToday: Boolean,
     hasEvent: Boolean,
     onClick: () -> Unit,
     modifier: Modifier
 ) {
+    if (!inMonth && !showAdjacent) {
+        // 不显示相邻月份时用空白占位，保持网格对齐
+        Box(
+            modifier
+                .padding(1.dp)
+                .height(56.dp)
+        )
+        return
+    }
     val info = LunarUtils.info(date)
     val shape = RoundedCornerShape(10.dp)
     val base = Modifier
@@ -488,7 +761,7 @@ private fun DayDetail(
 
             if (dayEvents.isEmpty()) {
                 Text(
-                    text = "这天还没有日程，点下方按钮添加",
+                    text = "这天还没有日程，点右下角「新建」添加",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
