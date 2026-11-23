@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -49,3 +50,27 @@ jobs:
           name: lunar-calendar-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lunar-calendar-debug
+          path: ./apk
+
+      - name: Rename APK with version tag
+        run: mv ./apk/app-debug.apk "./apk/lunar-calendar-${{ github.ref_name }}.apk"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: ./apk/lunar-calendar-${{ github.ref_name }}.apk
