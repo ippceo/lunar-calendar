@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import java.time.ZonedDateTime
 
@@ -48,7 +49,10 @@ object ReminderScheduler {
     }
 
     private fun pendingIntent(context: Context, eventId: String): PendingIntent {
+        // 用 data 字段带上事件 id，使不同事件即使 requestCode（hashCode）碰撞、
+        // 也会被系统视为不同的 PendingIntent，避免一个闹钟覆盖另一个。
         val intent = Intent(context, ReminderReceiver::class.java).apply {
+            data = Uri.parse("lunarcalendar://event/$eventId")
             putExtra(EXTRA_EVENT_ID, eventId)
         }
         return PendingIntent.getBroadcast(

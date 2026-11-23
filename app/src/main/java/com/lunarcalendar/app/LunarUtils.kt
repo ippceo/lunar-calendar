@@ -31,13 +31,20 @@ object LunarUtils {
             get() = jieQi.isNotEmpty() || festivals.isNotEmpty()
     }
 
-    private val cache = HashMap<LocalDate, Info>()
+    /** 最多缓存约 5 年的日期，避免左右浏览多年后无界增长。 */
+    private const val MAX_CACHE = 2048
+
+    private val cache = object : LinkedHashMap<LocalDate, Info>(MAX_CACHE, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<LocalDate, Info>?): Boolean =
+            size > MAX_CACHE
+    }
 
     @Synchronized
-    fun info(date: LocalDate): Info = cache.getOrPut(date) {
+    fun info(date: LocalDate): Info {
+        cache[date]?.let { return it }
         val solar = Solar.fromYmd(date.year, date.monthValue, date.dayOfMonth)
         val lunar = solar.lunar
-        Info(
+        val info = Info(
             lunarYear = lunar.year,
             lunarMonth = lunar.month,
             lunarDay = lunar.day,
@@ -49,6 +56,8 @@ object LunarUtils {
             festivals = (lunar.festivals + solar.festivals).distinct(),
             otherFestivals = lunar.otherFestivals.distinct()
         )
+        cache[date] = info
+        return info
     }
 
     /** 日历格子里的农历小字：节日 > 节气 > 初一显示月份 > 农历日。 */

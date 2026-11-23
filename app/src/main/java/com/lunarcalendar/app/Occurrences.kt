@@ -77,20 +77,21 @@ object Occurrences {
         return "$prefix ${next.monthValue}月${next.dayOfMonth}日 ${event.timeText}"
     }
 
-    /** 纪念日专用：显示"已经 X 天"或"X 天后就是第 N 周年"。 */
+    /** 纪念日专用：显示"已经 X 天"或"已经 X 天 · N 周年"。 */
     private fun anniversaryNextLabel(event: CalEvent, now: ZonedDateTime): String {
-        val start = LocalDate.of(event.year, event.month, event.day)
+        val start = runCatching { LocalDate.of(event.year, event.month, event.day) }.getOrNull()
+            ?: return ruleText(event)
         val today = now.toLocalDate()
         val daysPassed = ChronoUnit.DAYS.between(start, today)
-        if (daysPassed >= 0) {
-            val yearsPassed = today.year - start.year -
-                if (today.monthValue < start.monthValue ||
-                    (today.monthValue == start.monthValue && today.dayOfMonth < start.dayOfMonth)) 1 else 0
-            return "已经 ${daysPassed} 天 · ${yearsPassed + 1}周年"
+        if (daysPassed < 0) return "还有 ${-daysPassed} 天"
+        // 已满整年数：正好满一年当天算 1 周年（不是 2 周年）。
+        val yearsPassed = today.year - start.year -
+            if (today.monthValue < start.monthValue ||
+                (today.monthValue == start.monthValue && today.dayOfMonth < start.dayOfMonth)) 1 else 0
+        return if (yearsPassed <= 0) {
+            "已经 $daysPassed 天"
         } else {
-            val until = -daysPassed
-            val yearsAway = start.year - today.year
-            return "还有 ${until} 天 · ${yearsAway}周年"
+            "已经 $daysPassed 天 · $yearsPassed 周年"
         }
     }
 

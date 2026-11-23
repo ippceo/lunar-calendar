@@ -74,7 +74,8 @@ object Notifications {
             .build()
 
         runCatching {
-            NotificationManagerCompat.from(context).notify(event.id.hashCode(), notification)
+            // 以事件 id 作为 tag：不同事件的通知互不覆盖，避免 hashCode 碰撞时互相替换。
+            NotificationManagerCompat.from(context).notify(event.id, 0, notification)
         }
     }
 }

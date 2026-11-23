@@ -140,4 +140,39 @@ class LunarLogicTest {
         assertTrue(text.contains("闰"))
         assertTrue(text.contains("月"))
     }
+
+    @Test
+    fun anniversaryDaysPassedCountsFromOriginalDate() {
+        val event = CalEvent(
+            title = "love",
+            type = EventType.ANNIVERSARY,
+            year = 2023,
+            month = 2,
+            day = 5
+        )
+        assertEquals(0L, Occurrences.anniversaryDaysPassed(event, LocalDate.of(2023, 2, 5)))
+        // 2023-02-05 到 2024-02-05 共 365 天（2024 闰日在 2 月之后已跨过）
+        assertEquals(365L, Occurrences.anniversaryDaysPassed(event, LocalDate.of(2024, 2, 5)))
+    }
+
+    @Test
+    fun anniversaryLabelUsesCompletedYearsOnly() {
+        val event = CalEvent(
+            title = "love",
+            type = EventType.ANNIVERSARY,
+            year = 2024,
+            month = 1,
+            day = 1
+        )
+        val startDay = ZonedDateTime.of(2024, 1, 1, 12, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        val startLabel = Occurrences.nextLabel(event, startDay)
+        assertTrue(startLabel.contains("已经 0 天"))
+        assertFalse("起始日不应出现周年", startLabel.contains("周年"))
+
+        // 正好满一年：应是 1 周年，而不是 2 周年（修复前的 off-by-one）
+        val firstAnniversary = ZonedDateTime.of(2025, 1, 1, 12, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        val label = Occurrences.nextLabel(event, firstAnniversary)
+        assertTrue(label.contains("1 周年"))
+        assertFalse(label.contains("2 周年"))
+    }
 }

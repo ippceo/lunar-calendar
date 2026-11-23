@@ -1,6 +1,6 @@
 # 农历日历（Lunar Calendar）
 
-一个完全离线的 Android 日历 App：查看公历 + 农历、创建日程、阳历/农历生日提醒。
+一个完全离线的 Android 日历 App：查看公历 + 农历、创建日程、阳历/农历生日与纪念日提醒，并提供桌面 2×2 小组件。
 
 提醒使用 **Android 系统本地闹钟（AlarmManager）+ 本地通知**，不接 FCM、不接任何推送服务，也不申请网络权限。适合收不到 Google 推送的设备（外销机 / 无 GMS 设备）使用。
 
@@ -10,7 +10,10 @@
 - 点击日期查看当天农历详情与日程
 - 新建一次性日程
 - 新建每年重复的阳历生日 / 农历生日（闰月自动按平月回退）
+- 新建「纪念日」：每年提醒，并显示从原始日期累计「已经 X 天」
+- 桌面 2×2 小组件：可选显示日程 / 生日 / 纪念日；纪念日显示累计天数，其余显示倒计时
 - 到点发本地通知，支持开关、编辑、删除
+- 数据导出 / 导入（JSON 文件，换机迁移）
 - 重启手机、修改系统时间/时区、App 更新后自动重新排期
 - 提醒可靠性检查：通知权限、精确闹钟、忽略电池优化
 
@@ -61,18 +64,29 @@
 
 ```
 app/src/main/java/com/lunarcalendar/app/
-├── MainActivity.kt        # 入口、底部导航、状态管理
+├── MainActivity.kt        # 入口、底部导航、状态管理（旋转屏幕保留状态）
 ├── CalendarScreen.kt      # 月历网格 + 当天详情
-├── ReminderScreen.kt      # 提醒列表 + 权限检查
-├── EventEditorDialog.kt   # 新建/编辑日程与生日
+├── ReminderScreen.kt      # 提醒列表（日程/生日/纪念日）+ 权限检查
+├── SettingsScreen.kt      # 提醒可靠性检查 + 数据备份
+├── EventEditorDialog.kt   # 新建/编辑日程、生日、纪念日
 ├── Models.kt              # 事件数据模型 + JSON 序列化
 ├── LunarUtils.kt          # 农历/节气/节日查询、农历转阳历
-├── Occurrences.kt         # 重复规则、下一次触发时间
+├── Occurrences.kt         # 重复规则、下一次触发时间、纪念日累计天数
 ├── EventRepository.kt     # 本地存储
 ├── ReminderScheduler.kt   # AlarmManager 排期
 ├── Notifications.kt       # 本地通知
-└── Receivers.kt           # 到点提醒 / 开机重排
+├── Receivers.kt           # 到点提醒 / 开机重排
+├── DataBackup.kt          # 导出 / 导入 JSON 备份
+├── AppSettings.kt         # 从最近任务隐藏等设置
+└── ui/widget/
+    ├── LunarWidgetProvider.kt        # 桌面 2×2 小组件
+    └── LunarWidgetConfigActivity.kt  # 小组件配置页（选择显示内容）
 ```
+
+## 桌面小组件
+
+长按桌面空白处 → 添加小组件 → 选择本应用 2×2 组件，首次添加时选择「显示日程 / 生日 / 纪念日」。
+纪念日样式为「标题已经 / 累计天数 / ─── 天 ─── / 原始日期」，日程与生日显示倒计时。
 
 ## 许可
 

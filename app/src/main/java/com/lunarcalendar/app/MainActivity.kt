@@ -38,6 +38,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,6 +95,17 @@ fun LunarCalendarTheme(content: @Composable () -> Unit) {
     )
 }
 
+/** 旋转屏幕 / 进程重建后仍能保留当前查看的日期与月份。 */
+private val LocalDateSaver = Saver<LocalDate, String>(
+    save = { it.toString() },
+    restore = { LocalDate.parse(it) }
+)
+
+private val YearMonthSaver = Saver<YearMonth, String>(
+    save = { it.toString() },
+    restore = { YearMonth.parse(it) }
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarApp() {
@@ -100,10 +113,16 @@ private fun CalendarApp() {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var events by remember { mutableStateOf(EventRepository.load(context)) }
-    var today by remember { mutableStateOf(LocalDate.now()) }
-    var selected by remember { mutableStateOf(today) }
-    var cursor by remember { mutableStateOf(YearMonth.from(today)) }
-    var tab by remember { mutableIntStateOf(0) }
+    var today by rememberSaveable(stateSaver = LocalDateSaver) {
+        mutableStateOf(LocalDate.now())
+    }
+    var selected by rememberSaveable(stateSaver = LocalDateSaver) {
+        mutableStateOf(today)
+    }
+    var cursor by rememberSaveable(stateSaver = YearMonthSaver) {
+        mutableStateOf(YearMonth.from(today))
+    }
+    var tab by rememberSaveable { mutableStateOf(0) }
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
     var permissionTick by remember { mutableIntStateOf(0) }
 

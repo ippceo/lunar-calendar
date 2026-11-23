@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +38,7 @@ fun ReminderScreen(
     onToggle: (CalEvent, Boolean) -> Unit,
     onEdit: (CalEvent) -> Unit
 ) {
-    var subTab by remember { mutableIntStateOf(0) } // 0=日程, 1=生日, 2=纪念日
+    var subTab by rememberSaveable { mutableIntStateOf(0) } // 0=日程, 1=生日, 2=纪念日
 
     val schedule = remember(events) {
         events.filter { it.type == EventType.ONCE }.sortedBy { sortKey(it) }
