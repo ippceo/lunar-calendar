@@ -254,18 +254,6 @@ private fun CalendarApp() {
                     onJumpToMonth = { ym ->
                         cursor = ym
                     },
-                    onAddEvent = {
-                        editorTarget = EditorTarget(
-                            event = CalEvent(
-                                title = "",
-                                type = EventType.ONCE,
-                                year = selected.year,
-                                month = selected.monthValue,
-                                day = selected.dayOfMonth
-                            ),
-                            isNew = true
-                        )
-                    },
                     onEditEvent = { event ->
                         editorTarget = EditorTarget(event, isNew = false)
                     },

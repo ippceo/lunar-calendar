@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -21,11 +23,13 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +43,14 @@ fun ReminderScreen(
     onEdit: (CalEvent) -> Unit
 ) {
     var subTab by rememberSaveable { mutableIntStateOf(0) } // 0=日程, 1=生日, 2=纪念日
+    val pagerState = rememberPagerState(initialPage = subTab) { 3 }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { subTab = it }
+    }
+    LaunchedEffect(subTab) {
+        if (pagerState.currentPage != subTab) pagerState.animateScrollToPage(subTab)
+    }
 
     val schedule = remember(events) {
         events.filter { it.type == EventType.ONCE }.sortedBy { sortKey(it) }
@@ -49,17 +61,6 @@ fun ReminderScreen(
     }
     val anniversaries = remember(events) {
         events.filter { it.type == EventType.ANNIVERSARY }.sortedBy { sortKey(it) }
-    }
-    val list = when (subTab) {
-        0 -> schedule
-        1 -> birthdays
-        else -> anniversaries
-    }
-    val title = when (subTab) { 0 -> "日程"; 1 -> "生日"; else -> "纪念日" }
-    val emptyHint = when (subTab) {
-        0 -> "在“日历”页点“新建”，添加一次性日程。"
-        1 -> "在“日历”页点“新建”，选择阳历生日或农历生日。"
-        else -> "在“日历”页点“新建”，选择“纪念日”类型，记录某个值得纪念的日子。"
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -81,58 +82,94 @@ fun ReminderScreen(
             )
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "全部$title",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "${list.size} 条",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            ReminderList(
+                page = page,
+                schedule = schedule,
+                birthdays = birthdays,
+                anniversaries = anniversaries,
+                onToggle = onToggle,
+                onEdit = onEdit
+            )
+        }
+    }
+}
 
-            if (list.isEmpty()) {
-                item {
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("还没有$title", style = MaterialTheme.typography.bodyLarge)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                emptyHint,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+@Composable
+private fun ReminderList(
+    page: Int,
+    schedule: List<CalEvent>,
+    birthdays: List<CalEvent>,
+    anniversaries: List<CalEvent>,
+    onToggle: (CalEvent, Boolean) -> Unit,
+    onEdit: (CalEvent) -> Unit
+) {
+    val list = when (page) {
+        0 -> schedule
+        1 -> birthdays
+        else -> anniversaries
+    }
+    val title = when (page) { 0 -> "日程"; 1 -> "生日"; else -> "纪念日" }
+    val emptyHint = when (page) {
+        0 -> "在“日历”页点右下角“新建”，添加一次性日程。"
+        1 -> "在“日历”页点右下角“新建”，选择阳历生日或农历生日。"
+        else -> "在“日历”页点右下角“新建”，选择“纪念日”类型，记录某个值得纪念的日子。"
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "全部$title",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${list.size} 条",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (list.isEmpty()) {
+            item {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("还没有$title", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            emptyHint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
+        }
 
-            items(list, key = { it.id }) { event ->
-                ReminderCard(
-                    event = event,
-                    onToggle = { onToggle(event, it) },
-                    onEdit = { onEdit(event) }
-                )
-            }
+        items(list, key = { it.id }) { event ->
+            ReminderCard(
+                event = event,
+                onToggle = { onToggle(event, it) },
+                onEdit = { onEdit(event) }
+            )
         }
     }
 }

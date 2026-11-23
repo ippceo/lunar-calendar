@@ -16,12 +16,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -33,16 +34,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +57,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
+import kotlin.math.abs
 
 @Composable
 fun CalendarScreen(
@@ -65,19 +69,33 @@ fun CalendarScreen(
     onSelect: (LocalDate) -> Unit,
     onMonthChange: (Long) -> Unit,
     onJumpToMonth: (YearMonth) -> Unit,
-    onAddEvent: () -> Unit,
     onEditEvent: (CalEvent) -> Unit,
     onDeleteEvent: (CalEvent) -> Unit
 ) {
-    val firstDay = cursor.atDay(1)
-    val leading = firstDay.dayOfWeek.value % 7
-    val dates = remember(cursor) {
-        val start = firstDay.minusDays(leading.toLong())
-        (0 until 42).map { start.plusDays(it.toLong()) }
-    }
     val enabledEvents = events.filter { it.enabled }
-    val eventDays = remember(enabledEvents, cursor) {
-        dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
+    val startMonth = remember { YearMonth.of(MIN_YEAR, 1) }
+    val pageCount = (MAX_YEAR - MIN_YEAR + 1) * 12
+    val pagerState = rememberPagerState(
+        initialPage = ChronoUnit.MONTHS.between(startMonth, cursor).toInt()
+            .coerceIn(0, pageCount - 1)
+    ) { pageCount }
+
+    // 外部改变年月（拨盘、左右按钮、选中其它月份日期）时，滚动到对应页；跨越多页时直接定位
+    LaunchedEffect(cursor) {
+        val target = ChronoUnit.MONTHS.between(startMonth, cursor).toInt()
+            .coerceIn(0, pageCount - 1)
+        val distance = abs(target - pagerState.currentPage)
+        when {
+            distance == 0 -> Unit
+            distance > 12 -> pagerState.scrollToPage(target)
+            else -> pagerState.animateScrollToPage(target)
+        }
+    }
+    // 手势滑动停稳后，把当前页同步回外层状态
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            onJumpToMonth(startMonth.plusMonths(page.toLong()))
+        }
     }
 
     var showMonthPicker by rememberSaveable { mutableStateOf(false) }
@@ -95,19 +113,25 @@ fun CalendarScreen(
         )
         WeekdayHeader()
         Spacer(Modifier.height(2.dp))
-        MonthGrid(
-            cursor = cursor,
-            dates = dates,
-            selected = selected,
-            today = today,
-            eventDays = eventDays,
-            onSelect = onSelect
-        )
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp * 6)
+        ) { page ->
+            val pageMonth = startMonth.plusMonths(page.toLong())
+            MonthPage(
+                cursor = pageMonth,
+                selected = selected,
+                today = today,
+                enabledEvents = enabledEvents,
+                onSelect = onSelect
+            )
+        }
         Spacer(Modifier.height(10.dp))
         DayDetail(
             date = selected,
             events = events.filter { it.enabled },
-            onAddEvent = onAddEvent,
             onEditEvent = onEditEvent,
             onDeleteEvent = onDeleteEvent
         )
@@ -280,6 +304,33 @@ private fun WeekdayHeader() {
 }
 
 @Composable
+private fun MonthPage(
+    cursor: YearMonth,
+    selected: LocalDate,
+    today: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit
+) {
+    val firstDay = cursor.atDay(1)
+    val leading = firstDay.dayOfWeek.value % 7
+    val dates = remember(cursor) {
+        val start = firstDay.minusDays(leading.toLong())
+        (0 until 42).map { start.plusDays(it.toLong()) }
+    }
+    val eventDays = remember(enabledEvents, cursor) {
+        dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
+    }
+    MonthGrid(
+        cursor = cursor,
+        dates = dates,
+        selected = selected,
+        today = today,
+        eventDays = eventDays,
+        onSelect = onSelect
+    )
+}
+
+@Composable
 private fun MonthGrid(
     cursor: YearMonth,
     dates: List<LocalDate>,
@@ -385,7 +436,6 @@ private fun DayCell(
 private fun DayDetail(
     date: LocalDate,
     events: List<CalEvent>,
-    onAddEvent: () -> Unit,
     onEditEvent: (CalEvent) -> Unit,
     onDeleteEvent: (CalEvent) -> Unit
 ) {
@@ -452,13 +502,6 @@ private fun DayDetail(
                         )
                     }
                 }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onAddEvent, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("添加日程 / 生日 / 纪念日")
             }
         }
     }
