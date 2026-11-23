@@ -126,6 +126,11 @@ fun EventEditorDialog(
                         },
                         label = { Text("农历生日") }
                     )
+                    FilterChip(
+                        selected = type == EventType.ANNIVERSARY,
+                        onClick = { type = EventType.ANNIVERSARY },
+                        label = { Text("纪念日") }
+                    )
                 }
 
                 Text(
@@ -138,6 +143,7 @@ fun EventEditorDialog(
                             val solarTxt = solar?.let { "（今年对应${it.monthValue}月${it.dayOfMonth}日）" } ?: ""
                             "每年农历${LunarUtils.monthLabelOf(lunarMonth)}${LunarUtils.dayNameOf(lunarDay)}提醒$solarTxt；闰月不存在时按平月计算"
                         }
+                        EventType.ANNIVERSARY -> "每年这一天提醒；在桌面小组件上会显示“已经 X 天”的累计天数"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

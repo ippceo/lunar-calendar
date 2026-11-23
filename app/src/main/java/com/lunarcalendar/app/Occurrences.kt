@@ -17,7 +17,8 @@ object Occurrences {
         return when (event.type) {
             EventType.ONCE -> event.anchorDate()?.let { atTime(it, event.timeMinutes, zone) }
 
-            EventType.YEARLY_SOLAR -> (0..8).asSequence()
+            EventType.YEARLY_SOLAR,
+            EventType.ANNIVERSARY -> (0..8).asSequence()
                 .map { offset -> safeSolarDate(from.year + offset, event.month, event.day) }
                 .map { date -> atTime(date, event.timeMinutes, zone) }
                 .firstOrNull { it.isAfter(from) }
@@ -40,7 +41,8 @@ object Occurrences {
             LocalDate.of(event.year, event.month, event.day) == date
         }.getOrDefault(false)
 
-        EventType.YEARLY_SOLAR -> safeSolarDate(date.year, event.month, event.day) == date
+        EventType.YEARLY_SOLAR,
+        EventType.ANNIVERSARY -> safeSolarDate(date.year, event.month, event.day) == date
 
         EventType.YEARLY_LUNAR -> {
             val lunarYear = LunarUtils.info(date).lunarYear
@@ -53,11 +55,15 @@ object Occurrences {
         EventType.ONCE -> "${event.year}年${event.month}月${event.day}日"
         EventType.YEARLY_SOLAR -> "每年 ${event.month}月${event.day}日"
         EventType.YEARLY_LUNAR -> LunarUtils.lunarRuleText(event.year, event.month, event.day)
+        EventType.ANNIVERSARY -> "每年 ${event.month}月${event.day}日（${event.year}年开始）"
     }
 
     /** 提醒列表中的“下一次”文案。 */
     fun nextLabel(event: CalEvent, now: ZonedDateTime = ZonedDateTime.now()): String {
         if (!event.enabled) return "已关闭"
+        if (event.type == EventType.ANNIVERSARY) {
+            return anniversaryNextLabel(event, now)
+        }
         val next = nextTrigger(event, now) ?: return "已结束"
         if (event.type == EventType.ONCE && !next.isAfter(now)) return "已过期"
         val days = ChronoUnit.DAYS.between(now.toLocalDate(), next.toLocalDate())
@@ -69,6 +75,30 @@ object Occurrences {
             else -> "${days}天后"
         }
         return "$prefix ${next.monthValue}月${next.dayOfMonth}日 ${event.timeText}"
+    }
+
+    /** 纪念日专用：显示"已经 X 天"或"X 天后就是第 N 周年"。 */
+    private fun anniversaryNextLabel(event: CalEvent, now: ZonedDateTime): String {
+        val start = LocalDate.of(event.year, event.month, event.day)
+        val today = now.toLocalDate()
+        val daysPassed = ChronoUnit.DAYS.between(start, today)
+        if (daysPassed >= 0) {
+            val yearsPassed = today.year - start.year -
+                if (today.monthValue < start.monthValue ||
+                    (today.monthValue == start.monthValue && today.dayOfMonth < start.dayOfMonth)) 1 else 0
+            return "已经 ${daysPassed} 天 · ${yearsPassed + 1}周年"
+        } else {
+            val until = -daysPassed
+            val yearsAway = start.year - today.year
+            return "还有 ${until} 天 · ${yearsAway}周年"
+        }
+    }
+
+    /** 纪念日原始日期到今天的累计天数，可能为负数（还没到起始日）。 */
+    fun anniversaryDaysPassed(event: CalEvent, today: LocalDate = LocalDate.now()): Long {
+        val start = runCatching { LocalDate.of(event.year, event.month, event.day) }.getOrNull()
+            ?: return 0L
+        return ChronoUnit.DAYS.between(start, today)
     }
 
     fun weekdayName(date: LocalDate): String =

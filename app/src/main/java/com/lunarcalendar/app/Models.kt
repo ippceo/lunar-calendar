@@ -12,7 +12,10 @@ enum class EventType {
     YEARLY_SOLAR,
 
     /** 每年按农历重复（农历生日） */
-    YEARLY_LUNAR
+    YEARLY_LUNAR,
+
+    /** 纪念日：每年重复，同时显示「已经 X 天」（从原始事件日期算到今天的累计天数） */
+    ANNIVERSARY
 }
 
 /**
@@ -74,4 +77,5 @@ fun CalEvent.typeLabel(): String = when (type) {
     EventType.ONCE -> "一次性日程"
     EventType.YEARLY_SOLAR -> "每年 · 阳历"
     EventType.YEARLY_LUNAR -> "每年 · 农历"
+    EventType.ANNIVERSARY -> "纪念日（每年重复）"
 }

@@ -144,6 +144,7 @@ private fun CalendarApp() {
         events = updated
         EventRepository.save(context, updated)
         ReminderScheduler.rescheduleAll(context, updated)
+        com.lunarcalendar.app.ui.widget.LunarWidgetProvider.forceRefreshAll(context)
     }
 
     Scaffold(

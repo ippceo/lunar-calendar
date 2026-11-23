@@ -37,20 +37,28 @@ fun ReminderScreen(
     onToggle: (CalEvent, Boolean) -> Unit,
     onEdit: (CalEvent) -> Unit
 ) {
-    var subTab by remember { mutableIntStateOf(0) } // 0=日程, 1=生日
+    var subTab by remember { mutableIntStateOf(0) } // 0=日程, 1=生日, 2=纪念日
 
     val schedule = remember(events) {
         events.filter { it.type == EventType.ONCE }.sortedBy { sortKey(it) }
     }
     val birthdays = remember(events) {
-        events.filter { it.type != EventType.ONCE }.sortedBy { sortKey(it) }
+        events.filter { it.type == EventType.YEARLY_SOLAR || it.type == EventType.YEARLY_LUNAR }
+            .sortedBy { sortKey(it) }
     }
-    val list = if (subTab == 0) schedule else birthdays
-    val title = if (subTab == 0) "日程" else "生日"
-    val emptyHint = if (subTab == 0) {
-        "在“日历”页点“新建”，添加一次性日程。"
-    } else {
-        "在“日历”页点“新建”，选择阳历生日或农历生日。"
+    val anniversaries = remember(events) {
+        events.filter { it.type == EventType.ANNIVERSARY }.sortedBy { sortKey(it) }
+    }
+    val list = when (subTab) {
+        0 -> schedule
+        1 -> birthdays
+        else -> anniversaries
+    }
+    val title = when (subTab) { 0 -> "日程"; 1 -> "生日"; else -> "纪念日" }
+    val emptyHint = when (subTab) {
+        0 -> "在“日历”页点“新建”，添加一次性日程。"
+        1 -> "在“日历”页点“新建”，选择阳历生日或农历生日。"
+        else -> "在“日历”页点“新建”，选择“纪念日”类型，记录某个值得纪念的日子。"
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -64,6 +72,11 @@ fun ReminderScreen(
                 selected = subTab == 1,
                 onClick = { subTab = 1 },
                 text = { Text("生日") }
+            )
+            Tab(
+                selected = subTab == 2,
+                onClick = { subTab = 2 },
+                text = { Text("纪念日") }
             )
         }
 
