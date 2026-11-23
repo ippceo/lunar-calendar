@@ -50,7 +50,12 @@ class LunarWidgetProvider : AppWidgetProvider() {
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.edit {
-            appWidgetIds.forEach { remove(viewKey(it)) }
+            appWidgetIds.forEach {
+                remove(viewKey(it))
+                remove(modeKey(it))
+                remove(eventKey(it))
+                remove(annivKey(it))
+            }
         }
     }
 
@@ -63,7 +68,18 @@ class LunarWidgetProvider : AppWidgetProvider() {
         const val VIEW_BIRTHDAY = "birthday"
         const val VIEW_ANNIVERSARY = "anniversary"
 
+        /** 自动：取距离现在最近的一条；手动：用户指定一条。 */
+        const val MODE_AUTO = "auto"
+        const val MODE_MANUAL = "manual"
+
+        /** 纪念日卡片主显示：已经过的天数 / 距离下次还有的天数。 */
+        const val ANNIV_PASSED = "passed"
+        const val ANNIV_REMAINING = "remaining"
+
         fun viewKey(widgetId: Int) = "view_$widgetId"
+        fun modeKey(widgetId: Int) = "mode_$widgetId"
+        fun eventKey(widgetId: Int) = "event_$widgetId"
+        fun annivKey(widgetId: Int) = "anniv_$widgetId"
 
         fun setViewType(context: Context, widgetId: Int, viewType: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -74,14 +90,51 @@ class LunarWidgetProvider : AppWidgetProvider() {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString(viewKey(widgetId), null)
 
+        fun setMode(context: Context, widgetId: Int, mode: String) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit { putString(modeKey(widgetId), mode) }
+        }
+
+        fun getMode(context: Context, widgetId: Int): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(modeKey(widgetId), MODE_AUTO) ?: MODE_AUTO
+
+        fun setEventId(context: Context, widgetId: Int, eventId: String?) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit { if (eventId == null) remove(eventKey(widgetId)) else putString(eventKey(widgetId), eventId) }
+        }
+
+        fun getEventId(context: Context, widgetId: Int): String? =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(eventKey(widgetId), null)
+
+        fun setAnnivPrimary(context: Context, widgetId: Int, primary: String) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit { putString(annivKey(widgetId), primary) }
+        }
+
+        fun getAnnivPrimary(context: Context, widgetId: Int): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(annivKey(widgetId), ANNIV_PASSED) ?: ANNIV_PASSED
+
         fun update(context: Context, awm: AppWidgetManager, widgetId: Int) {
             val viewType = getViewType(context, widgetId)
                 ?: return renderPlaceholder(context, awm, widgetId)
 
             val events = EventRepository.load(context).filter { it.enabled }
-            val next = filterAndSort(events, viewType).firstOrNull()
-                ?: return renderEmpty(context, awm, widgetId, viewType)
-            renderContent(context, awm, widgetId, next)
+            val candidates = filterAndSort(events, viewType)
+            if (candidates.isEmpty()) {
+                return renderEmpty(context, awm, widgetId, viewType)
+            }
+            val manualId = getEventId(context, widgetId)
+            val manual = getMode(context, widgetId) == MODE_MANUAL && manualId != null
+            val selected = if (manual) {
+                candidates.firstOrNull { it.id == manualId } ?: candidates.firstOrNull()
+            } else {
+                candidates.firstOrNull()
+            } ?: return renderEmpty(context, awm, widgetId, viewType)
+
+            renderContent(context, awm, widgetId, selected)
         }
 
         private fun filterAndSort(events: List<CalEvent>, viewType: String): List<CalEvent> =
@@ -89,6 +142,11 @@ class LunarWidgetProvider : AppWidgetProvider() {
                 VIEW_ANNIVERSARY -> events.filter { it.type == EventType.ANNIVERSARY }
                     .sortedByDescending { Occurrences.anniversaryDaysPassed(it) }
                 VIEW_SCHEDULE -> events.filter { it.type == EventType.ONCE }
+                    .filter { event ->
+                        // 自动模式下只取未过期的日程
+                        val next = Occurrences.nextTrigger(event) ?: return@filter false
+                        next.isAfter(ZonedDateTime.now())
+                    }
                     .sortedBy { Occurrences.nextTrigger(it)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE }
                 else -> events.filter {
                     it.type == EventType.YEARLY_SOLAR || it.type == EventType.YEARLY_LUNAR
@@ -100,6 +158,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val rv = RemoteViews(context.packageName, R.layout.widget_main)
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.VISIBLE)
+            rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(R.id.w_header, "拾光历")
             rv.setTextViewText(R.id.w_number, "＋")
             rv.setTextViewText(R.id.w_unit, "点我选择显示内容")
@@ -116,43 +175,106 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val rv = RemoteViews(context.packageName, R.layout.widget_main)
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
+            val now = ZonedDateTime.now()
+            val today = now.toLocalDate()
 
-            if (event.type == EventType.ANNIVERSARY) {
-                val days = Occurrences.anniversaryDaysPassed(event)
-                val title = event.title.ifBlank { "纪念日" }
-                rv.setTextViewText(R.id.w_header, "${title}已经")
-                rv.setTextViewText(R.id.w_number, days.toString())
-                rv.setTextViewText(R.id.w_unit, "天")
-                rv.setTextViewText(
-                    R.id.w_footer,
-                    "${event.year}年${event.month}月${event.day}日"
-                )
-            } else {
-                val next = Occurrences.nextTrigger(event)
-                val days = next?.let {
-                    ChronoUnit.DAYS.between(LocalDate.now(), it.toLocalDate())
+            when (event.type) {
+                EventType.ANNIVERSARY -> {
+                    val passed = Occurrences.anniversaryDaysPassed(event, today).coerceAtLeast(0)
+                    val remaining = daysUntilNextAnniversary(event, today)
+                    val primaryPassed = getAnnivPrimary(context, widgetId) == ANNIV_PASSED
+                    val title = event.title.ifBlank { "纪念日" }
+                    rv.setTextViewText(R.id.w_header, if (primaryPassed) "${title}已经" else "${title}还有")
+                    rv.setTextViewText(R.id.w_number, (if (primaryPassed) passed else remaining).toString())
+                    rv.setTextViewText(R.id.w_unit, "天")
+                    rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
+                    rv.setTextViewText(
+                        R.id.w_secondary,
+                        if (primaryPassed) "还有 $remaining 天" else "已经 $passed 天"
+                    )
+                    rv.setTextViewText(
+                        R.id.w_footer,
+                        "${event.year}年${event.month}月${event.day}日"
+                    )
                 }
-                val isOnce = event.type == EventType.ONCE
-                val title = event.title.ifBlank { if (isOnce) "日程" else "生日" }
-                val numberText: String
-                val unitText: String
-                when {
-                    days == null -> { numberText = ""; unitText = "" }
-                    days < 0L -> { numberText = "0"; unitText = "已过期" }
-                    days == 0L -> { numberText = "0"; unitText = "今天" }
-                    days == 1L -> { numberText = "1"; unitText = "明天" }
-                    else -> { numberText = days.toString(); unitText = "天" }
+
+                EventType.ONCE -> {
+                    val next = Occurrences.nextTrigger(event)
+                    val title = event.title.ifBlank { "日程" }
+                    rv.setTextViewText(R.id.w_header, title)
+                    if (next == null || !next.isAfter(now)) {
+                        rv.setTextViewText(R.id.w_number, "—")
+                        rv.setTextViewText(R.id.w_unit, "已结束")
+                    } else {
+                        val minutes = java.time.Duration.between(now, next).toMinutes()
+                        val hours = ((minutes + 59) / 60).coerceAtLeast(1)
+                        if (hours < 24) {
+                            rv.setTextViewText(R.id.w_number, hours.toString())
+                            rv.setTextViewText(R.id.w_unit, "小时")
+                        } else {
+                            rv.setTextViewText(
+                                R.id.w_number,
+                                ChronoUnit.DAYS.between(today, next.toLocalDate()).toString()
+                            )
+                            rv.setTextViewText(R.id.w_unit, "天")
+                        }
+                    }
+                    rv.setTextViewText(
+                        R.id.w_footer,
+                        next?.toLocalDate()?.let { Occurrences.fullDateText(it) }
+                            ?: "${event.month}月${event.day}日"
+                    )
                 }
-                rv.setTextViewText(R.id.w_header, title)
-                rv.setTextViewText(R.id.w_number, numberText)
-                rv.setTextViewText(R.id.w_unit, unitText)
-                rv.setTextViewText(
-                    R.id.w_footer,
-                    next?.toLocalDate()?.let { Occurrences.fullDateText(it) }
-                        ?: "${event.month}月${event.day}日"
-                )
+
+                else -> {
+                    val next = Occurrences.nextTrigger(event)
+                    val days = next?.let { ChronoUnit.DAYS.between(today, it.toLocalDate()) }
+                    val title = event.title.ifBlank { "生日" }
+                    val numberText: String
+                    val unitText: String
+                    when {
+                        days == null -> { numberText = ""; unitText = "" }
+                        days < 0L -> { numberText = "0"; unitText = "已过期" }
+                        days == 0L -> { numberText = "0"; unitText = "今天" }
+                        days == 1L -> { numberText = "1"; unitText = "明天" }
+                        else -> { numberText = days.toString(); unitText = "天" }
+                    }
+                    rv.setTextViewText(R.id.w_header, title)
+                    rv.setTextViewText(R.id.w_number, numberText)
+                    rv.setTextViewText(R.id.w_unit, unitText)
+                    val age = next?.let { birthdayAge(event, it.toLocalDate()) }
+                    if (age != null) {
+                        rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
+                        rv.setTextViewText(R.id.w_secondary, "$age 岁")
+                    }
+                    rv.setTextViewText(
+                        R.id.w_footer,
+                        next?.toLocalDate()?.let { Occurrences.fullDateText(it) }
+                            ?: "${event.month}月${event.day}日"
+                    )
+                }
             }
             awm.updateAppWidget(widgetId, rv)
+        }
+
+        /** 距离下一次周年（同月同日）还有多少天；当天为 0。 */
+        private fun daysUntilNextAnniversary(event: CalEvent, today: LocalDate): Long {
+            val thisYear = safeDate(today.year, event.month, event.day)
+            val next = if (thisYear.isBefore(today)) safeDate(today.year + 1, event.month, event.day) else thisYear
+            return ChronoUnit.DAYS.between(today, next)
+        }
+
+        /** 下次生日时的年龄；年份明显不合理（如旧数据）时返回 null。 */
+        private fun birthdayAge(event: CalEvent, nextDate: LocalDate): Int? {
+            if (event.year < 1900) return null
+            val age = nextDate.year - event.year
+            return if (age in 0..150) age else null
+        }
+
+        private fun safeDate(year: Int, month: Int, day: Int): LocalDate {
+            val safeMonth = month.coerceIn(1, 12)
+            val length = java.time.YearMonth.of(year, safeMonth).lengthOfMonth()
+            return LocalDate.of(year, safeMonth, day.coerceIn(1, length))
         }
 
         private fun renderEmpty(
@@ -164,6 +286,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val rv = RemoteViews(context.packageName, R.layout.widget_main)
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
+            rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(
                 R.id.w_header,
                 when (viewType) {

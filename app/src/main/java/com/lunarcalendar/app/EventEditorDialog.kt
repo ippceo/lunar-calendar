@@ -13,8 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
@@ -59,7 +64,18 @@ fun EventEditorDialog(
     var lunarDay by remember(original.id) {
         mutableIntStateOf(if (original.type == EventType.YEARLY_LUNAR) original.day else initialLunar.lunarDay)
     }
+    var lunarYear by remember(original.id) {
+        mutableIntStateOf(
+            if (original.type == EventType.YEARLY_LUNAR && original.year > 0) {
+                original.year
+            } else {
+                initialLunar.lunarYear
+            }
+        )
+    }
     var showLunarPicker by remember(original.id) { mutableStateOf(false) }
+    var advances by remember(original.id) { mutableStateOf(original.advanceReminders) }
+    var showAdvanceAdder by remember(original.id) { mutableStateOf(false) }
     var timeMinutes by remember(original.id) { mutableIntStateOf(original.timeMinutes) }
     var note by remember(original.id) { mutableStateOf(original.note) }
     var enabled by remember(original.id) { mutableStateOf(original.enabled) }
@@ -68,12 +84,13 @@ fun EventEditorDialog(
         original.copy(
             title = title.trim(),
             type = type,
-            year = LunarUtils.info(LocalDate.now()).lunarYear,
+            year = lunarYear,
             month = lunarMonth,
             day = lunarDay,
             timeMinutes = timeMinutes,
             note = note.trim(),
-            enabled = enabled
+            enabled = enabled,
+            advanceReminders = advances
         )
     } else {
         original.copy(
@@ -84,7 +101,8 @@ fun EventEditorDialog(
             day = date.dayOfMonth,
             timeMinutes = timeMinutes,
             note = note.trim(),
-            enabled = enabled
+            enabled = enabled,
+            advanceReminders = advances
         )
     }
 
@@ -124,6 +142,7 @@ fun EventEditorDialog(
                         onClick = {
                             if (type != EventType.YEARLY_LUNAR) {
                                 val li = LunarUtils.info(date)
+                                lunarYear = li.lunarYear
                                 lunarMonth = li.lunarMonth
                                 lunarDay = li.lunarDay
                             }
@@ -144,16 +163,15 @@ fun EventEditorDialog(
                     text = when (type) {
                         EventType.ONCE -> "只在这个日期提醒一次"
                         EventType.YEARLY_SOLAR -> "每年阳历的这一天提醒"
-                        EventType.YEARLY_LUNAR -> {
-                            val thisYear = LunarUtils.info(LocalDate.now()).lunarYear
-                            val solar = LunarUtils.solarFromLunar(thisYear, lunarMonth, lunarDay)
-                            val solarTxt = solar?.let { "（今年对应${it.monthValue}月${it.dayOfMonth}日）" } ?: ""
-                            "每年农历${LunarUtils.monthLabelOf(lunarMonth)}${LunarUtils.dayNameOf(lunarDay)}提醒$solarTxt；闰月不存在时按平月计算"
-                        }
-                        EventType.ANNIVERSARY -> "每年这一天提醒；在桌面小组件上会显示“已经 X 天”的累计天数"
+                        EventType.YEARLY_LUNAR -> "每年农历这一天提醒；闰月不存在时按平月计算"
+                        EventType.ANNIVERSARY -> "每年同一天提醒；桌面组件显示“已经 X 天”"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // 固定两行高度，切换类型时下方内容不会上下跳动
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 if (type == EventType.YEARLY_LUNAR) {
@@ -164,15 +182,20 @@ fun EventEditorDialog(
                             modifier = Modifier.width(52.dp)
                         )
                         OutlinedButton(onClick = { showLunarPicker = true }) {
-                            Text("农历 ${LunarUtils.monthLabelOf(lunarMonth)}${LunarUtils.dayNameOf(lunarDay)}")
+                            Text(
+                                "农历 $lunarYear 年" +
+                                    "${LunarUtils.monthLabelOf(lunarMonth)}${LunarUtils.dayNameOf(lunarDay)}"
+                            )
                         }
                     }
                     if (showLunarPicker) {
                         LunarDatePickerDialog(
+                            initialYear = lunarYear,
                             initialMonth = lunarMonth,
                             initialDay = lunarDay,
                             onDismiss = { showLunarPicker = false },
-                            onConfirm = { m, d ->
+                            onConfirm = { y, m, d ->
+                                lunarYear = y
                                 lunarMonth = m
                                 lunarDay = d
                                 showLunarPicker = false
@@ -223,6 +246,82 @@ fun EventEditorDialog(
                     }
                 }
 
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "提前提醒",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { showAdvanceAdder = true },
+                            enabled = advances.size < 7
+                        ) {
+                            Text("＋ 添加")
+                        }
+                    }
+                    if (advances.isEmpty()) {
+                        Text(
+                            text = "可添加事件前 1~7 天（最多一周）的指定时间提醒",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    advances.sortedBy { it.daysBefore }.forEach { item ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "${item.daysBefore} 天前",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedButton(onClick = {
+                                TimePickerDialog(
+                                    context,
+                                    { _, hour, minute ->
+                                        advances = advances.map {
+                                            if (it.daysBefore == item.daysBefore) {
+                                                it.copy(timeMinutes = hour * 60 + minute)
+                                            } else {
+                                                it
+                                            }
+                                        }
+                                    },
+                                    item.timeMinutes / 60,
+                                    item.timeMinutes % 60,
+                                    true
+                                ).show()
+                            }) {
+                                Text(item.timeText)
+                            }
+                            IconButton(onClick = {
+                                advances = advances.filterNot { it.daysBefore == item.daysBefore }
+                            }) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = "删除提前提醒",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (showAdvanceAdder) {
+                    AddAdvanceDialog(
+                        existingDays = advances.map { it.daysBefore }.toSet(),
+                        defaultTime = timeMinutes,
+                        onDismiss = { showAdvanceAdder = false },
+                        onConfirm = { days, minutes ->
+                            advances = (advances.filterNot { it.daysBefore == days } +
+                                AdvanceReminder(days, minutes)).sortedBy { it.daysBefore }
+                            showAdvanceAdder = false
+                        }
+                    )
+                }
+
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -267,15 +366,94 @@ fun EventEditorDialog(
 }
 
 /**
- * 农历日期选择对话框：左侧选月份（正月~腊月，含闰正月~闰腊月），右侧选日期（初一~三十）。
+ * 添加提前提醒：选择提前 1~7 天，以及当天的提醒时刻。
+ */
+@Composable
+private fun AddAdvanceDialog(
+    existingDays: Set<Int>,
+    defaultTime: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (days: Int, minutes: Int) -> Unit
+) {
+    val context = LocalContext.current
+    val firstFree = (1..7).firstOrNull { it !in existingDays } ?: 1
+    val dayLabels = remember { (1..7).map { "$it 天前" }.toTypedArray() }
+    var days by remember { mutableIntStateOf(firstFree) }
+    var minutes by remember { mutableIntStateOf(defaultTime) }
+    val duplicate = days in existingDays
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("添加提前提醒") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "提前天数",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AndroidView(
+                    factory = { ctx ->
+                        NumberPicker(ctx).apply {
+                            minValue = 0
+                            maxValue = dayLabels.size - 1
+                            displayedValues = dayLabels
+                            value = firstFree - 1
+                            wrapSelectorWheel = false
+                            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            setOnValueChangedListener { _, _, newVal -> days = newVal + 1 }
+                        }
+                    },
+                    update = { it.value = days - 1 },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "提醒时间",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(onClick = {
+                        TimePickerDialog(
+                            context,
+                            { _, hour, minute -> minutes = hour * 60 + minute },
+                            minutes / 60,
+                            minutes % 60,
+                            true
+                        ).show()
+                    }) {
+                        Text("%02d:%02d".format(minutes / 60, minutes % 60))
+                    }
+                }
+                if (duplicate) {
+                    Text(
+                        text = "该天数已有提醒，添加后将替换",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(days, minutes) }) { Text("添加") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+/**
+ * 农历日期选择对话框：依次选择年、月份（正月~腊月，含闰正月~闰腊月）、日期（初一~三十）。
  * 月份值为负数表示闰月，与 [CalEvent] 存储约定一致。
  */
 @Composable
 private fun LunarDatePickerDialog(
+    initialYear: Int,
     initialMonth: Int,
     initialDay: Int,
     onDismiss: () -> Unit,
-    onConfirm: (month: Int, day: Int) -> Unit
+    onConfirm: (year: Int, month: Int, day: Int) -> Unit
 ) {
     // 前 12 项为平月（1..12），后 12 项为闰月（-1..-12）
     val monthEntries = remember { (1..12).toList() + (1..12).map { -it } }
@@ -283,6 +461,7 @@ private fun LunarDatePickerDialog(
     val dayLabels = remember { (1..30).map { LunarUtils.dayNameOf(it) }.toTypedArray() }
 
     val initialMonthIndex = monthEntries.indexOf(initialMonth).let { if (it < 0) 0 else it }
+    var year by remember { mutableIntStateOf(initialYear.coerceIn(1900, 2100)) }
     var monthIndex by remember { mutableIntStateOf(initialMonthIndex) }
     var dayIndex by remember { mutableIntStateOf((initialDay - 1).coerceIn(0, 29)) }
 
@@ -292,8 +471,22 @@ private fun LunarDatePickerDialog(
         text = {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                AndroidView(
+                    factory = { ctx ->
+                        NumberPicker(ctx).apply {
+                            minValue = 1900
+                            maxValue = 2100
+                            value = initialYear.coerceIn(1900, 2100)
+                            wrapSelectorWheel = false
+                            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            setOnValueChangedListener { _, _, newVal -> year = newVal }
+                        }
+                    },
+                    update = { it.value = year },
+                    modifier = Modifier.weight(1.3f)
+                )
                 AndroidView(
                     factory = { ctx ->
                         NumberPicker(ctx).apply {
@@ -327,7 +520,7 @@ private fun LunarDatePickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(monthEntries[monthIndex], dayIndex + 1) }) {
+            TextButton(onClick = { onConfirm(year, monthEntries[monthIndex], dayIndex + 1) }) {
                 Text("确定")
             }
         },

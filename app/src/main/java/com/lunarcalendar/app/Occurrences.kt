@@ -35,6 +35,36 @@ object Occurrences {
         }
     }
 
+    /**
+     * 某条「提前提醒」下一次的触发时间（事件日期前 [AdvanceReminder.daysBefore] 天的指定时刻）。
+     * 一年前的日期也纳入候选，避免跨年时漏算尚未触发的那一次。
+     */
+    fun nextAdvanceTrigger(
+        event: CalEvent,
+        reminder: AdvanceReminder,
+        from: ZonedDateTime = ZonedDateTime.now()
+    ): ZonedDateTime? {
+        if (!event.enabled) return null
+        val year = from.toLocalDate().year
+        val dates = when (event.type) {
+            EventType.ONCE -> event.anchorDate()?.let { listOf(it) } ?: emptyList()
+
+            EventType.YEARLY_SOLAR,
+            EventType.ANNIVERSARY -> (year - 1..year + 9)
+                .map { safeSolarDate(it, event.month, event.day) }
+
+            EventType.YEARLY_LUNAR -> {
+                val base = LunarUtils.info(from.toLocalDate()).lunarYear
+                (base - 1..base + 9)
+                    .mapNotNull { LunarUtils.solarFromLunar(it, event.month, event.day) }
+            }
+        }
+        return dates
+            .map { atTime(it, reminder.timeMinutes, from.zone).minusDays(reminder.daysBefore.toLong()) }
+            .filter { it.isAfter(from) }
+            .minOrNull()
+    }
+
     /** 某一天是否会发生这个提醒（用于日历打点和当日列表）。 */
     fun occursOn(event: CalEvent, date: LocalDate): Boolean = when (event.type) {
         EventType.ONCE -> runCatching {

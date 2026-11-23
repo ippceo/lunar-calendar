@@ -10,6 +10,13 @@ import java.time.ZonedDateTime
 
 const val EXTRA_EVENT_ID = "event_id"
 
+/** 提前提醒的天数；主提醒不带此参数（默认 0 = 当天）。 */
+const val EXTRA_ADVANCE_DAYS = "advance_days"
+
+/** 主提醒的槽位编号，提前提醒用 1~7 表示提前天数。 */
+private const val SLOT_MAIN = 0
+private const val MAX_ADVANCE_DAYS = 7
+
 /**
  * 用 AlarmManager 设置系统本地闹钟。
  *
@@ -24,14 +31,36 @@ object ReminderScheduler {
 
     fun schedule(context: Context, event: CalEvent, from: ZonedDateTime = ZonedDateTime.now()) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        val pendingIntent = pendingIntent(context, event.id)
-        alarmManager.cancel(pendingIntent)
+        // 先清空该事件的所有槽位（主提醒 + 1~7 天前），避免删除提前提醒后残留旧闹钟。
+        for (slot in SLOT_MAIN..MAX_ADVANCE_DAYS) {
+            alarmManager.cancel(pendingIntent(context, event.id, slot))
+        }
         if (!event.enabled) return
 
         val trigger = Occurrences.nextTrigger(event, from) ?: return
-        if (!trigger.isAfter(ZonedDateTime.now())) return
+        if (trigger.isAfter(ZonedDateTime.now())) {
+            setAlarm(alarmManager, trigger.toInstant().toEpochMilli(), pendingIntent(context, event.id, SLOT_MAIN))
+        }
 
-        val triggerAtMillis = trigger.toInstant().toEpochMilli()
+        event.advanceReminders.forEach { reminder ->
+            val advanceTrigger = Occurrences.nextAdvanceTrigger(event, reminder, from) ?: return@forEach
+            if (!advanceTrigger.isAfter(ZonedDateTime.now())) return@forEach
+            setAlarm(
+                alarmManager,
+                advanceTrigger.toInstant().toEpochMilli(),
+                pendingIntent(context, event.id, reminder.daysBefore)
+            )
+        }
+    }
+
+    fun cancel(context: Context, eventId: String) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+        for (slot in SLOT_MAIN..MAX_ADVANCE_DAYS) {
+            alarmManager.cancel(pendingIntent(context, eventId, slot))
+        }
+    }
+
+    private fun setAlarm(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
@@ -43,21 +72,25 @@ object ReminderScheduler {
         }
     }
 
-    fun cancel(context: Context, eventId: String) {
-        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        alarmManager.cancel(pendingIntent(context, eventId))
-    }
-
-    private fun pendingIntent(context: Context, eventId: String): PendingIntent {
+    /**
+     * @param slot 0 = 当天主提醒，1~7 = 提前 N 天提醒。
+     */
+    private fun pendingIntent(context: Context, eventId: String, slot: Int): PendingIntent {
         // 用 data 字段带上事件 id，使不同事件即使 requestCode（hashCode）碰撞、
         // 也会被系统视为不同的 PendingIntent，避免一个闹钟覆盖另一个。
+        val uri = if (slot == SLOT_MAIN) {
+            "lunarcalendar://event/$eventId"
+        } else {
+            "lunarcalendar://event/$eventId/advance/$slot"
+        }
         val intent = Intent(context, ReminderReceiver::class.java).apply {
-            data = Uri.parse("lunarcalendar://event/$eventId")
+            data = Uri.parse(uri)
             putExtra(EXTRA_EVENT_ID, eventId)
+            if (slot != SLOT_MAIN) putExtra(EXTRA_ADVANCE_DAYS, slot)
         }
         return PendingIntent.getBroadcast(
             context,
-            eventId.hashCode(),
+            if (slot == SLOT_MAIN) eventId.hashCode() else "$eventId#advance$slot".hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

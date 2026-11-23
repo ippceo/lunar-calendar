@@ -51,6 +51,18 @@
         android:textColor="#8A8398" />
 
     <TextView
+        android:id="@+id/w_secondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#6B6478"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/w_footer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

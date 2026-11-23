@@ -1,8 +1,18 @@
 package com.lunarcalendar.app
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 import java.util.UUID
+
+/** 提前提醒：在事件发生前 [daysBefore] 天的 [timeMinutes]（当天 0 点起的分钟数）提醒。 */
+data class AdvanceReminder(
+    val daysBefore: Int,
+    val timeMinutes: Int
+) {
+    val timeText: String
+        get() = "%02d:%02d".format(timeMinutes / 60, timeMinutes % 60)
+}
 
 enum class EventType {
     /** 一次性日程 */
@@ -33,7 +43,9 @@ data class CalEvent(
     val day: Int,
     val timeMinutes: Int = 9 * 60,
     val note: String = "",
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    /** 提前提醒列表（最多 7 条，分别对应 1~7 天前）。 */
+    val advanceReminders: List<AdvanceReminder> = emptyList()
 ) {
     val timeText: String
         get() = "%02d:%02d".format(timeMinutes / 60, timeMinutes % 60)
@@ -48,10 +60,26 @@ data class CalEvent(
         put("time", timeMinutes)
         put("note", note)
         put("enabled", enabled)
+        if (advanceReminders.isNotEmpty()) {
+            put("advance", JSONArray().apply {
+                advanceReminders.forEach { item ->
+                    put(JSONObject().put("d", item.daysBefore).put("t", item.timeMinutes))
+                }
+            })
+        }
     }
 
     companion object {
         fun fromJson(obj: JSONObject): CalEvent? = runCatching {
+            val advance = obj.optJSONArray("advance")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    val item = arr.optJSONObject(i) ?: return@mapNotNull null
+                    AdvanceReminder(
+                        daysBefore = item.optInt("d").coerceIn(1, 7),
+                        timeMinutes = item.optInt("t", 9 * 60).coerceIn(0, 24 * 60 - 1)
+                    )
+                }.distinctBy { it.daysBefore }.sortedBy { it.daysBefore }
+            } ?: emptyList()
             CalEvent(
                 id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
                 title = obj.optString("title"),
@@ -61,7 +89,8 @@ data class CalEvent(
                 day = obj.optInt("day"),
                 timeMinutes = obj.optInt("time", 9 * 60),
                 note = obj.optString("note"),
-                enabled = obj.optBoolean("enabled", true)
+                enabled = obj.optBoolean("enabled", true),
+                advanceReminders = advance
             )
         }.getOrNull()
     }

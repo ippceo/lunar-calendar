@@ -11,7 +11,11 @@ class ReminderReceiver : BroadcastReceiver() {
         val event = EventRepository.load(context).firstOrNull { it.id == eventId } ?: return
         if (!event.enabled) return
 
-        Notifications.showReminder(context, event)
+        Notifications.showReminder(
+            context,
+            event,
+            advanceDays = intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0)
+        )
 
         if (event.type != EventType.ONCE) {
             // 刚触发的时间点已经过去，从 1 分钟后开始找下一次，避免重复提醒。

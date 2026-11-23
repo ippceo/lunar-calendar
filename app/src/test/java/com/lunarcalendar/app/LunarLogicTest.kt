@@ -175,4 +175,40 @@ class LunarLogicTest {
         assertTrue(label.contains("1 周年"))
         assertFalse(label.contains("2 周年"))
     }
+
+    @Test
+    fun advanceReminderTriggersDaysBeforeEvent() {
+        val reminder = AdvanceReminder(daysBefore = 3, timeMinutes = 9 * 60)
+        val event = CalEvent(
+            title = "生日",
+            type = EventType.YEARLY_SOLAR,
+            year = 1990,
+            month = 3,
+            day = 10,
+            advanceReminders = listOf(reminder)
+        )
+        val from = ZonedDateTime.of(2026, 3, 1, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        assertEquals(
+            ZonedDateTime.of(2026, 3, 7, 9, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
+            Occurrences.nextAdvanceTrigger(event, reminder, from)
+        )
+    }
+
+    @Test
+    fun advanceReminderRollsToNextYearWhenPassed() {
+        val reminder = AdvanceReminder(daysBefore = 3, timeMinutes = 9 * 60)
+        val event = CalEvent(
+            title = "生日",
+            type = EventType.YEARLY_SOLAR,
+            year = 1990,
+            month = 3,
+            day = 10,
+            advanceReminders = listOf(reminder)
+        )
+        val from = ZonedDateTime.of(2026, 3, 8, 0, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        assertEquals(
+            ZonedDateTime.of(2027, 3, 7, 9, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
+            Occurrences.nextAdvanceTrigger(event, reminder, from)
+        )
+    }
 }

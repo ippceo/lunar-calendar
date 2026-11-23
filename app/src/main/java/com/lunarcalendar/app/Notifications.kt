@@ -32,7 +32,7 @@ object Notifications {
         }
     }
 
-    fun showReminder(context: Context, event: CalEvent) {
+    fun showReminder(context: Context, event: CalEvent, advanceDays: Int = 0) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 context,
@@ -42,9 +42,11 @@ object Notifications {
             return
         }
         ensureChannel(context)
-        val lunar = LunarUtils.info(LocalDate.now())
+        val targetDate = LocalDate.now().plusDays(advanceDays.toLong())
+        val lunar = LunarUtils.info(targetDate)
+        val dayText = if (advanceDays > 0) "${advanceDays} 天后" else "今天"
         val detail = buildString {
-            append("今天 ${event.timeText}")
+            append("$dayText ${targetDate.monthValue}月${targetDate.dayOfMonth}日 ${event.timeText}")
             append(" · 农历${lunar.monthLabel}${lunar.dayName}")
             if (event.note.isNotBlank()) {
                 append("\n")
@@ -64,7 +66,7 @@ object Notifications {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(event.title.ifBlank { "日程提醒" })
-            .setContentText("今天 ${event.timeText} · ${event.typeLabel()}")
+            .setContentText("$dayText ${targetDate.monthValue}月${targetDate.dayOfMonth}日 · ${event.typeLabel()}")
             .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
