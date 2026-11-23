@@ -173,7 +173,7 @@ private fun DataBackupCard(events: List<CalEvent>, onSaveAll: (List<CalEvent>) -
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "把所有日程和生日导出成一个文件，换手机后在新设备上导入即可恢复。导入按名称自动去重，同一条不会重复。",
+                text = "把所有日程、生日和纪念日导出成一个文件，换手机后在新设备上导入即可恢复。导入按名称自动去重，同一条不会重复。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -94,7 +94,7 @@ fun ReminderScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (subTab == 0) "全部日程" else "全部生日",
+                        text = "全部$title",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)

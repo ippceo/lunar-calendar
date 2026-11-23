@@ -1,5 +1,7 @@
 package com.lunarcalendar.app
 
+import android.view.ViewGroup
+import android.widget.NumberPicker
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +27,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -167,7 +169,7 @@ private fun MonthSwitcher(
 }
 
 /**
- * 年月快速跳转：点月份直接跳转，支持逐年切换与「今年」快捷回到当前年。
+ * 年月跳转：上下拨盘选择年份与月份，可快速滑动到任意年份。
  */
 @Composable
 private fun MonthYearPickerDialog(
@@ -175,67 +177,86 @@ private fun MonthYearPickerDialog(
     onDismiss: () -> Unit,
     onPick: (YearMonth) -> Unit
 ) {
-    var year by remember { mutableIntStateOf(current.year) }
-    val thisYear = YearMonth.now().year
+    var year by remember { mutableIntStateOf(current.year.coerceIn(MIN_YEAR, MAX_YEAR)) }
+    var month by remember { mutableIntStateOf(current.monthValue) }
+    val monthLabels = remember { (1..12).map { "${it}月" }.toTypedArray() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("跳转到年月") },
+        title = { Text("选择年月") },
         text = {
-            Column {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    IconButton(onClick = { year -= 1 }) {
-                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上一年")
-                    }
-                    TextButton(onClick = { year = thisYear }) {
-                        Text(
-                            text = "$year 年",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    IconButton(onClick = { year += 1 }) {
-                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下一年")
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                for (row in 0 until 3) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        for (col in 0 until 4) {
-                            val month = row * 4 + col + 1
-                            val isCurrent = year == current.year && month == current.monthValue
-                            OutlinedButton(
-                                onClick = { onPick(YearMonth.of(year, month)) },
-                                modifier = Modifier.weight(1f),
-                                colors = if (isCurrent) {
-                                    ButtonDefaults.outlinedButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                } else {
-                                    ButtonDefaults.outlinedButtonColors()
-                                }
-                            ) {
-                                Text("$month 月")
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                WheelColumn("年", Modifier.weight(1.4f)) {
+                    AndroidView(
+                        factory = { ctx ->
+                            NumberPicker(ctx).apply {
+                                minValue = MIN_YEAR
+                                maxValue = MAX_YEAR
+                                value = year
+                                wrapSelectorWheel = false
+                                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                                setOnValueChangedListener { _, _, v -> year = v }
                             }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                        },
+                        update = { if (it.value != year) it.value = year },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                WheelColumn("月", Modifier.weight(1f)) {
+                    AndroidView(
+                        factory = { ctx ->
+                            NumberPicker(ctx).apply {
+                                minValue = 0
+                                maxValue = 11
+                                displayedValues = monthLabels
+                                value = month - 1
+                                wrapSelectorWheel = true
+                                descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                                setOnValueChangedListener { _, _, v -> month = v + 1 }
+                            }
+                        },
+                        update = { if (it.value != month - 1) it.value = month - 1 },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = { onPick(YearMonth.of(year, month)) }) { Text("确定") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    year = YearMonth.now().year
+                    month = YearMonth.now().monthValue
+                }) { Text("今年") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
         }
     )
 }
+
+@Composable
+private fun WheelColumn(
+    label: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        content()
+    }
+}
+
+private const val MIN_YEAR = 1900
+private const val MAX_YEAR = 2100
 
 @Composable
 private fun WeekdayHeader() {
@@ -437,7 +458,7 @@ private fun DayDetail(
             OutlinedButton(onClick = onAddEvent, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("添加日程 / 生日")
+                Text("添加日程 / 生日 / 纪念日")
             }
         }
     }
