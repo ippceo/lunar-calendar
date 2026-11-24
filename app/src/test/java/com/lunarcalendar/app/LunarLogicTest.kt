@@ -121,6 +121,25 @@ class LunarLogicTest {
     }
 
     @Test
+    fun eventDatesMatchDayScan() {
+        // 年视图打点改为按事件展开，必须与逐日判定完全一致
+        val events = listOf(
+            CalEvent(title = "农历生日", type = EventType.YEARLY_LUNAR, year = 1990, month = 10, day = 15),
+            CalEvent(title = "闰月生日", type = EventType.YEARLY_LUNAR, year = 2014, month = -9, day = 1),
+            CalEvent(title = "阳历生日", type = EventType.YEARLY_SOLAR, year = 2024, month = 2, day = 29),
+            CalEvent(title = "一次性", type = EventType.ONCE, year = 2025, month = 6, day = 1),
+            CalEvent(title = "纪念日", type = EventType.ANNIVERSARY, year = 2023, month = 2, day = 5)
+        )
+        for (year in 2024..2026) {
+            val expected = generateSequence(LocalDate.of(year, 1, 1)) { it.plusDays(1) }
+                .takeWhile { it.year == year }
+                .filter { date -> events.any { Occurrences.occursOn(it, date) } }
+                .toSet()
+            assertEquals("$year 年打点日期不一致", expected, Occurrences.datesIn(events, year..year))
+        }
+    }
+
+    @Test
     fun nextTriggerForYearlySolarSkipsToNextYear() {
         val event = CalEvent(
             title = "纪念日",

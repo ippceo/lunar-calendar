@@ -61,7 +61,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.abs
+import androidx.compose.ui.graphics.Color as ComposeColor
 
 @Composable
 fun CalendarScreen(
@@ -76,7 +78,7 @@ fun CalendarScreen(
     onEditEvent: (CalEvent) -> Unit,
     onDeleteEvent: (CalEvent) -> Unit
 ) {
-    val enabledEvents = events.filter { it.enabled }
+    val enabledEvents = remember(events) { events.filter { it.enabled } }
     val startMonth = remember { YearMonth.of(MIN_YEAR, 1) }
     val pageCount = (MAX_YEAR - MIN_YEAR + 1) * 12
     val pagerState = rememberPagerState(
@@ -84,9 +86,10 @@ fun CalendarScreen(
             .coerceIn(0, pageCount - 1)
     ) { pageCount }
 
-    var viewMode by rememberSaveable { mutableIntStateOf(0) } // 0 = 月视图, 1 = 年视图
+    var viewMode by rememberSaveable { mutableIntStateOf(0) }
+    // 0 = 月视图, 1 = 年视图, 2 = 周视图, 3 = 日视图
 
-    // 月视图才同步月分页；年视图选择日期时不能让隐藏的月分页把月份回写
+    // 月视图才同步月分页；年/周/日视图选择日期时不能让隐藏的月分页把月份回写
     LaunchedEffect(cursor, viewMode) {
         if (viewMode != 0) return@LaunchedEffect
         val target = ChronoUnit.MONTHS.between(startMonth, cursor).toInt()
@@ -109,6 +112,40 @@ fun CalendarScreen(
         }
     }
 
+    // 周视图分页：以 Monday 为起点一周算一页
+    val weekPageCount = (MAX_YEAR - MIN_YEAR + 1) * 54 + 2
+    val weekPagerState = rememberPagerState(
+        initialPage = ChronoUnit.WEEKS.between(
+            startMonth.atDay(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)),
+            selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        ).toInt().coerceIn(0, weekPageCount - 1)
+    ) { weekPageCount }
+    LaunchedEffect(selected, viewMode) {
+        if (viewMode != 2) return@LaunchedEffect
+        val target = ChronoUnit.WEEKS.between(
+            startMonth.atDay(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)),
+            selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        ).toInt().coerceIn(0, weekPageCount - 1)
+        if (weekPagerState.currentPage != target) weekPagerState.scrollToPage(target)
+    }
+
+    // 日视图分页
+    val dayPageCount = ChronoUnit.DAYS.between(
+        startMonth.atDay(1).minusYears(10),
+        YearMonth.of(MAX_YEAR, 12).atDay(31).plusYears(10)
+    ).toInt() + 1
+    val dayStartDate = startMonth.atDay(1).minusYears(10)
+    val dayPagerState = rememberPagerState(
+        initialPage = ChronoUnit.DAYS.between(dayStartDate, selected).toInt()
+            .coerceIn(0, dayPageCount - 1)
+    ) { dayPageCount }
+    LaunchedEffect(selected, viewMode) {
+        if (viewMode != 3) return@LaunchedEffect
+        val target = ChronoUnit.DAYS.between(dayStartDate, selected).toInt()
+            .coerceIn(0, dayPageCount - 1)
+        if (dayPagerState.currentPage != target) dayPagerState.scrollToPage(target)
+    }
+
     var showMonthPicker by rememberSaveable { mutableStateOf(false) }
     var showAdjacent by rememberSaveable { mutableStateOf(false) }
     var viewMenu by rememberSaveable { mutableStateOf(false) }
@@ -120,62 +157,132 @@ fun CalendarScreen(
             .padding(horizontal = 10.dp)
     ) {
         ViewModeBar(
-            yearMode = viewMode == 1,
+            viewMode = viewMode,
             showAdjacent = showAdjacent,
             menuOpen = viewMenu,
             onMenuOpenChange = { viewMenu = it },
             onModeChange = { viewMode = it },
             onToggleAdjacent = { showAdjacent = !showAdjacent }
         )
-        if (viewMode == 0) {
-            MonthSwitcher(
-                cursor = cursor,
-                onMonthChange = onMonthChange,
-                onTitleClick = { showMonthPicker = true }
-            )
-            WeekdayHeader()
-            Spacer(Modifier.height(2.dp))
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp * 6)
-            ) { page ->
-                val pageMonth = startMonth.plusMonths(page.toLong())
-                MonthPage(
-                    cursor = pageMonth,
+        when (viewMode) {
+            0 -> { // 月视图
+                MonthSwitcher(
+                    cursor = cursor,
+                    onMonthChange = onMonthChange,
+                    onTitleClick = { showMonthPicker = true }
+                )
+                WeekdayHeader()
+                Spacer(Modifier.height(2.dp))
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp * 6)
+                ) { page ->
+                    val pageMonth = startMonth.plusMonths(page.toLong())
+                    MonthPage(
+                        cursor = pageMonth,
+                        selected = selected,
+                        today = today,
+                        enabledEvents = enabledEvents,
+                        showAdjacent = showAdjacent,
+                        onSelect = onSelect
+                    )
+                }
+            }
+            1 -> { // 年视图
+                MonthSwitcher(
+                    cursor = cursor,
+                    onMonthChange = onMonthChange,
+                    onTitleClick = { showMonthPicker = true },
+                    yearOnly = true
+                )
+                Spacer(Modifier.height(6.dp))
+                YearPager(
+                    cursor = cursor,
                     selected = selected,
                     today = today,
                     enabledEvents = enabledEvents,
-                    showAdjacent = showAdjacent,
+                    onSelect = onSelect,
+                    onYearChange = onYearChange
+                )
+            }
+            2 -> { // 周视图
+                val weekStart = selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                val weekEnd = weekStart.plusDays(6)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { onSelect(selected.minusWeeks(1)) }) {
+                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上一周")
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "${weekStart.monthValue}月${weekStart.dayOfMonth}日 – ${weekEnd.monthValue}月${weekEnd.dayOfMonth}日",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = { onSelect(selected.plusWeeks(1)) }) {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下一周")
+                    }
+                }
+                WeekPager(
+                    pagerState = weekPagerState,
+                    dayStart = dayStartDate,
+                    selected = selected,
+                    today = today,
+                    enabledEvents = enabledEvents,
                     onSelect = onSelect
                 )
             }
-        } else {
-            MonthSwitcher(
-                cursor = cursor,
-                onMonthChange = onMonthChange,
-                onTitleClick = { showMonthPicker = true },
-                yearOnly = true
-            )
-            Spacer(Modifier.height(6.dp))
-            YearPager(
-                cursor = cursor,
-                selected = selected,
-                today = today,
-                enabledEvents = enabledEvents,
-                onSelect = onSelect,
-                onYearChange = onYearChange
-            )
+            3 -> { // 日视图
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { onSelect(selected.minusDays(1)) }) {
+                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上一天")
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "${selected.year}年${selected.monthValue}月${selected.dayOfMonth}日",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = { onSelect(selected.plusDays(1)) }) {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下一天")
+                    }
+                }
+                DayPager(
+                    pagerState = dayPagerState,
+                    dayStart = dayStartDate,
+                    selected = selected,
+                    enabledEvents = enabledEvents,
+                    onSelect = onSelect
+                )
+            }
         }
-        Spacer(Modifier.height(10.dp))
-        DayDetail(
-            date = selected,
-            events = events.filter { it.enabled },
-            onEditEvent = onEditEvent,
-            onDeleteEvent = onDeleteEvent
-        )
-        Spacer(Modifier.height(96.dp))
+        if (viewMode != 3) {
+            Spacer(Modifier.height(10.dp))
+            DayDetail(
+                date = selected,
+                events = events.filter { it.enabled },
+                onEditEvent = onEditEvent,
+                onDeleteEvent = onDeleteEvent
+            )
+            Spacer(Modifier.height(96.dp))
+        } else {
+            Spacer(Modifier.height(96.dp))
+        }
     }
 
     if (showMonthPicker) {
@@ -192,13 +299,19 @@ fun CalendarScreen(
 
 @Composable
 private fun ViewModeBar(
-    yearMode: Boolean,
+    viewMode: Int,
     showAdjacent: Boolean,
     menuOpen: Boolean,
     onMenuOpenChange: (Boolean) -> Unit,
     onModeChange: (Int) -> Unit,
     onToggleAdjacent: () -> Unit
 ) {
+    val modeLabel = when (viewMode) {
+        1 -> "年视图"
+        2 -> "周视图"
+        3 -> "日视图"
+        else -> "月视图"
+    }
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -212,7 +325,7 @@ private fun ViewModeBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (yearMode) "年视图" else "月视图",
+                    text = modeLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -226,26 +339,18 @@ private fun ViewModeBar(
                 expanded = menuOpen,
                 onDismissRequest = { onMenuOpenChange(false) }
             ) {
-                DropdownMenuItem(
-                    text = { Text("月视图") },
-                    trailingIcon = {
-                        if (!yearMode) Icon(Icons.Filled.Check, contentDescription = null)
-                    },
-                    onClick = {
-                        onModeChange(0)
-                        onMenuOpenChange(false)
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("年视图") },
-                    trailingIcon = {
-                        if (yearMode) Icon(Icons.Filled.Check, contentDescription = null)
-                    },
-                    onClick = {
-                        onModeChange(1)
-                        onMenuOpenChange(false)
-                    }
-                )
+                listOf(0 to "月视图", 1 to "年视图", 2 to "周视图", 3 to "日视图").forEach { (mode, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        trailingIcon = {
+                            if (viewMode == mode) Icon(Icons.Filled.Check, contentDescription = null)
+                        },
+                        onClick = {
+                            onModeChange(mode)
+                            onMenuOpenChange(false)
+                        }
+                    )
+                }
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text("显示相邻月份日期") },
@@ -471,6 +576,8 @@ private fun YearPager(
     }
     HorizontalPager(
         state = pager,
+        // 提前组合相邻年份，滑动时不必在拖拽中同步组合 12 个月的内容
+        beyondViewportPageCount = 1,
         modifier = Modifier
             .fillMaxWidth()
             .height(580.dp)
@@ -495,6 +602,10 @@ private fun YearGrid(
     enabledEvents: List<CalEvent>,
     onSelect: (LocalDate) -> Unit
 ) {
+    // 整年一次性展开，避免每个 MiniMonth 各自扫描 42 天
+    val eventDays = remember(enabledEvents, year) {
+        Occurrences.datesIn(enabledEvents, year..year)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (row in 0 until 4) {
             Row(
@@ -508,7 +619,7 @@ private fun YearGrid(
                         highlightedMonth = month,
                         selected = selected,
                         today = today,
-                        enabledEvents = enabledEvents,
+                        eventDays = eventDays,
                         onSelect = onSelect,
                         modifier = Modifier.weight(1f)
                     )
@@ -524,7 +635,7 @@ private fun MiniMonth(
     highlightedMonth: Int,
     selected: LocalDate,
     today: LocalDate,
-    enabledEvents: List<CalEvent>,
+    eventDays: Set<LocalDate>,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier
 ) {
@@ -534,10 +645,12 @@ private fun MiniMonth(
         val start = firstDay.minusDays(leading.toLong())
         (0 until 42).map { start.plusDays(it.toLong()) }
     }
-    val eventDays = remember(enabledEvents, month) {
-        dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
-    }
     val isCurrent = month.monthValue == highlightedMonth
+    // 颜色在月份层级取一次，避免 42 个格子各自读 CompositionLocal
+    val scheme = MaterialTheme.colorScheme
+    val primary = scheme.primary
+    val onPrimary = scheme.onPrimary
+    val onSurface = scheme.onSurface
 
     Box(
         modifier = modifier.height(136.dp),
@@ -549,9 +662,9 @@ private fun MiniMonth(
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
             color = if (isCurrent) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                primary.copy(alpha = 0.22f)
             } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.13f)
+                onSurface.copy(alpha = 0.13f)
             }
         )
         Column(Modifier.fillMaxWidth()) {
@@ -567,6 +680,9 @@ private fun MiniMonth(
                             isSelected = date == selected,
                             isToday = date == today,
                             hasEvent = eventDays.contains(date),
+                            primary = primary,
+                            onPrimary = onPrimary,
+                            onSurface = onSurface,
                             onClick = { onSelect(date) },
                             modifier = Modifier.weight(1f)
                         )
@@ -584,6 +700,9 @@ private fun MiniDayCell(
     isSelected: Boolean,
     isToday: Boolean,
     hasEvent: Boolean,
+    primary: Color,
+    onPrimary: Color,
+    onSurface: Color,
     onClick: () -> Unit,
     modifier: Modifier
 ) {
@@ -592,17 +711,17 @@ private fun MiniDayCell(
             .height(20.dp)
             .clip(CircleShape)
             .background(
-                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                if (isSelected) primary else Color.Transparent
             )
             .clickable(enabled = inMonth && !isSelected, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         if (!inMonth) return@Box
         val color = when {
-            isSelected -> MaterialTheme.colorScheme.onPrimary
-            isToday -> MaterialTheme.colorScheme.primary
-            date.dayOfWeek.value >= 6 -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.onSurface
+            isSelected -> onPrimary
+            isToday -> primary
+            date.dayOfWeek.value >= 6 -> primary
+            else -> onSurface
         }
         Text(
             text = date.dayOfMonth.toString(),
@@ -619,7 +738,7 @@ private fun MiniDayCell(
                     .padding(bottom = 1.dp)
                     .size(3.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(primary)
             )
         }
     }
@@ -641,8 +760,8 @@ private fun MonthPage(
         val start = firstDay.minusDays(leading.toLong())
         (0 until 42).map { start.plusDays(it.toLong()) }
     }
-    val eventDays = remember(enabledEvents, cursor, showAdjacent) {
-        dates.filter { date -> enabledEvents.any { Occurrences.occursOn(it, date) } }.toSet()
+    val eventDays = remember(enabledEvents, cursor) {
+        Occurrences.datesIn(enabledEvents, dates.first().year..dates.last().year)
     }
     MonthGrid(
         cursor = cursor,
@@ -769,6 +888,270 @@ private fun DayCell(
     }
 }
 
+/**
+ * 周视图：7 列每天一列，顶部是日期格子，下面是当天事件列表。
+ */
+@Composable
+private fun WeekPager(
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    dayStart: LocalDate,
+    selected: LocalDate,
+    today: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit
+) {
+    // 预展开整年的打点集合，避免每个 Pager 页面重复算
+    val yearRange = remember(selected.year) { selected.year - 1..selected.year + 1 }
+    val eventDays = remember(enabledEvents, yearRange) {
+        Occurrences.datesIn(enabledEvents, yearRange)
+    }
+    HorizontalPager(
+        state = pagerState,
+        beyondViewportPageCount = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+    ) { page ->
+        val weekStart = dayStart.plusDays(page * 7L)
+        val dates = remember(weekStart) { (0 until 7).map { weekStart.plusDays(it.toLong()) } }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            dates.forEach { date ->
+                DayColumn(
+                    date = date,
+                    isSelected = date == selected,
+                    isToday = date == today,
+                    hasEvent = eventDays.contains(date),
+                    events = enabledEvents.filter { Occurrences.occursOn(it, date) },
+                    onClick = { onSelect(date) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 日视图：24 小时时间轴 + 事件块。
+ */
+@Composable
+private fun DayPager(
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    dayStart: LocalDate,
+    selected: LocalDate,
+    enabledEvents: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit
+) {
+    HorizontalPager(
+        state = pagerState,
+        beyondViewportPageCount = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(480.dp)
+    ) { page ->
+        val date = dayStart.plusDays(page.toLong())
+        DayTimeline(
+            date = date,
+            events = enabledEvents.filter { Occurrences.occursOn(it, date) }.sortedBy { it.timeMinutes },
+            onSelect = onSelect
+        )
+    }
+}
+
+/** 周视图里的一列：日期号 + 事件数点 + 事件列表前 2 条。 */
+@Composable
+private fun DayColumn(
+    date: LocalDate,
+    isSelected: Boolean,
+    isToday: Boolean,
+    hasEvent: Boolean,
+    events: List<CalEvent>,
+    onClick: () -> Unit,
+    modifier: Modifier
+) {
+    val weekdays = listOf("一", "二", "三", "四", "五", "六", "日")
+    val scheme = MaterialTheme.colorScheme
+    val bgColor = when {
+        isSelected -> scheme.primary
+        isToday -> scheme.primary.copy(alpha = 0.15f)
+        else -> Color.Transparent
+    }
+    val textColor = when {
+        isSelected -> scheme.onPrimary
+        isToday -> scheme.primary
+        date.dayOfWeek.value >= 6 -> scheme.primary
+        else -> scheme.onSurface
+    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = weekdays[date.dayOfWeek.value - 1],
+            fontSize = 8.sp,
+            color = textColor.copy(alpha = 0.7f)
+        )
+        Box(
+            Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isSelected) scheme.onPrimary.copy(alpha = 0.2f) else Color.Transparent
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = date.dayOfMonth.toString(),
+                fontSize = 11.sp,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = textColor
+            )
+        }
+        if (hasEvent) {
+            Box(
+                Modifier
+                    .padding(top = 1.dp)
+                    .size(3.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) scheme.onPrimary else scheme.primary)
+            )
+        }
+        // 事件列表前 2 条（紧凑版）
+        Spacer(Modifier.height(2.dp))
+        events.take(2).forEach { event ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1.dp, vertical = 0.5.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = event.title.take(4),
+                    fontSize = 7.sp,
+                    maxLines = 1,
+                    color = if (isSelected) scheme.onPrimary else scheme.onSurfaceVariant
+                )
+            }
+        }
+        if (events.size > 2) {
+            Text(
+                text = "+${events.size - 2}",
+                fontSize = 7.sp,
+                color = if (isSelected) scheme.onPrimary else scheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** 日视图时间轴：24 小时行，事件按 timeMinutes 定位。 */
+@Composable
+private fun DayTimeline(
+    date: LocalDate,
+    events: List<CalEvent>,
+    onSelect: (LocalDate) -> Unit
+) {
+    val info = LunarUtils.info(date)
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize()) {
+        // 顶部：日期头
+        Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = scheme.surfaceVariant)
+        ) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    text = "${date.monthValue}月${date.dayOfMonth}日 · ${Occurrences.weekdayName(date)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = info.fullLunarText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        if (events.isEmpty()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "这天还没有日程",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                events.forEach { event ->
+                    val eventColor = ComposeColor(
+                        (event.color ?: MaterialTheme.colorScheme.primary.value.toLong() and 0xFFFFFFFFL).toInt()
+                    )
+                    Card(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp)),
+                        colors = CardDefaults.cardColors(containerColor = eventColor.copy(alpha = 0.12f))
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(8.dp, 36.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(eventColor)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = event.timeText,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = eventColor
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = event.title,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = Occurrences.ruleText(event),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = scheme.onSurfaceVariant
+                                )
+                                if (event.note.isNotEmpty()) {
+                                    Text(
+                                        text = event.note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun DayDetail(
     date: LocalDate,
@@ -780,6 +1163,7 @@ private fun DayDetail(
     val dayEvents = remember(events, date) {
         events.filter { Occurrences.occursOn(it, date) }.sortedBy { it.timeMinutes }
     }
+    var detailTarget by remember { mutableStateOf<CalEvent?>(null) }
 
     Card(
         Modifier.fillMaxWidth(),
@@ -834,7 +1218,7 @@ private fun DayDetail(
                     dayEvents.forEach { event ->
                         EventRow(
                             event = event,
-                            onEdit = { onEditEvent(event) },
+                            onTap = { detailTarget = event },
                             onDelete = { onDeleteEvent(event) }
                         )
                     }
@@ -842,22 +1226,128 @@ private fun DayDetail(
             }
         }
     }
+
+    detailTarget?.let { event ->
+        EventDetailDialog(
+            event = event,
+            onDismiss = { detailTarget = null },
+            onEdit = {
+                detailTarget = null
+                onEditEvent(event)
+            },
+            onDelete = {
+                detailTarget = null
+                onDeleteEvent(event)
+            }
+        )
+    }
 }
 
 @Composable
-private fun EventRow(event: CalEvent, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun EventDetailDialog(
+    event: CalEvent,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val themeColor = MaterialTheme.colorScheme.primary
+    val argb = EventColors.resolve(event.color, themeColor.value.toLong())
+    val dotColor = ComposeColor(argb and 0xFFFFFFFFL)
+    val anchor = event.anchorDate()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(dotColor)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(event.title, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("类型：${event.typeLabel()}", style = MaterialTheme.typography.bodyMedium)
+                if (anchor != null) {
+                    val next = Occurrences.nextTrigger(event)?.toLocalDate()
+                    Text(
+                        buildString {
+                            append("日期：${anchor.year}年${anchor.monthValue}月${anchor.dayOfMonth}日")
+                            if (event.type == EventType.YEARLY_LUNAR) {
+                                val li = LunarUtils.info(anchor)
+                                append(" · ${li.fullLunarText}")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (next != null) {
+                        val age = event.birthdayAge(next)
+                        if (age != null) {
+                            Text("下次 ${next.monthValue}月${next.dayOfMonth}日 · $age 岁", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text("下次 ${next.monthValue}月${next.dayOfMonth}日", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Text("时间：${event.timeText}", style = MaterialTheme.typography.bodyMedium)
+                if (event.advanceReminders.isNotEmpty()) {
+                    Text(
+                        "提前：${event.advanceReminders.sortedBy { it.daysBefore }.joinToString("、") { "${it.daysBefore}天前${it.timeText}" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (event.note.isNotEmpty()) {
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                    Text("备注：${event.note}", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    text = if (event.enabled) "已启用提醒" else "已关闭提醒",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (event.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = onDelete) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onEdit) { Text("编辑") }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun EventRow(event: CalEvent, onTap: () -> Unit, onDelete: () -> Unit) {
+    val themeColor = MaterialTheme.colorScheme.primary
+    val argb = EventColors.resolve(event.color, themeColor.value.toLong())
+    val dotColor = ComposeColor(argb and 0xFFFFFFFFL)
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onEdit)
+            .clickable(onClick = onTap)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(dotColor)
+        )
+        Spacer(Modifier.width(8.dp))
         Text(
             text = event.timeText,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = dotColor,
             modifier = Modifier.width(50.dp)
         )
         Column(Modifier.weight(1f)) {

@@ -80,6 +80,36 @@ object Occurrences {
         }
     }
 
+    /**
+     * 某条提醒在公历 [year] 年内会发生的日期。
+     *
+     * 由事件反推日期，避免对 42 个格子逐日调用 [occursOn]（年视图 12 个月会放大 12 倍）。
+     * 农历事件的候选农历年覆盖公历年边界，最后仍用 [occursOn] 校验，保持与逐日判定一致。
+     */
+    fun datesIn(event: CalEvent, year: Int): List<LocalDate> {
+        val candidates = when (event.type) {
+            EventType.ONCE -> event.anchorDate()?.let { listOf(it) } ?: emptyList()
+
+            EventType.YEARLY_SOLAR,
+            EventType.ANNIVERSARY -> listOf(safeSolarDate(year, event.month, event.day))
+
+            EventType.YEARLY_LUNAR -> (year - 1..year + 1)
+                .mapNotNull { LunarUtils.solarFromLunar(it, event.month, event.day) }
+        }
+        return candidates.filter { it.year == year && occursOn(event, it) }
+    }
+
+    /** 多条提醒在若干公历年内的发生日期集合，供日历打点使用。 */
+    fun datesIn(events: List<CalEvent>, years: IntRange): Set<LocalDate> {
+        val result = HashSet<LocalDate>()
+        for (year in years) {
+            for (event in events) {
+                result.addAll(datesIn(event, year))
+            }
+        }
+        return result
+    }
+
     /** 重复规则文案，例如 "每年 农历十月十五"。 */
     fun ruleText(event: CalEvent): String = when (event.type) {
         EventType.ONCE -> "${event.year}年${event.month}月${event.day}日"

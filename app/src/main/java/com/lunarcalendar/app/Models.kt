@@ -8,6 +8,29 @@ import java.util.UUID
 /** 提醒名称、待办内容与备注的最大字数。 */
 const val MAX_TEXT_LENGTH = 50
 
+/**
+ * 事件/提醒的预设颜色（ARGB int）。
+ * 主题 null 时用日历主色；用户可选 8 个预设色。
+ */
+object EventColors {
+    val PRESETS = listOf(
+        0xFFB3261E.toInt(), // 红
+        0xFFD97706.toInt(), // 橙
+        0xFFCA8A04.toInt(), // 黄
+        0xFF059669.toInt(), // 绿
+        0xFF0284C7.toInt(), // 蓝
+        0xFF7C3AED.toInt(), // 紫
+        0xFFDB2777.toInt(), // 粉
+        0xFF475569.toInt(), // 灰
+    )
+
+    /** 颜色 → 人类可读名，仅用于无障碍标签。 */
+    val LABELS = listOf("红", "橙", "黄", "绿", "蓝", "紫", "粉", "灰")
+
+    /** [color] 为 null 时返回主题默认色；否则返回原值。 */
+    fun resolve(color: Int?, fallback: Long): Long = (color?.toLong() ?: fallback) and 0xFFFFFFFFL
+}
+
 /** 提前提醒：在事件发生前 [daysBefore] 天的 [timeMinutes]（当天 0 点起的分钟数）提醒。 */
 data class AdvanceReminder(
     val daysBefore: Int,
@@ -47,6 +70,8 @@ data class CalEvent(
     val timeMinutes: Int = 9 * 60,
     val note: String = "",
     val enabled: Boolean = true,
+    /** 预设颜色（ARGB int）；null 表示跟随主题主色。 */
+    val color: Int? = null,
     /** 提前提醒列表（最多 7 条，分别对应 1~7 天前）。 */
     val advanceReminders: List<AdvanceReminder> = emptyList()
 ) {
@@ -63,6 +88,7 @@ data class CalEvent(
         put("time", timeMinutes)
         put("note", note)
         put("enabled", enabled)
+        color?.let { put("color", it) }
         if (advanceReminders.isNotEmpty()) {
             put("advance", JSONArray().apply {
                 advanceReminders.forEach { item ->
@@ -93,6 +119,7 @@ data class CalEvent(
                 timeMinutes = obj.optInt("time", 9 * 60),
                 note = obj.optString("note"),
                 enabled = obj.optBoolean("enabled", true),
+                color = if (obj.has("color") && !obj.isNull("color")) obj.optInt("color") else null,
                 advanceReminders = advance
             )
         }.getOrNull()

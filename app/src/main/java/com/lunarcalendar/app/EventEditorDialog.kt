@@ -4,6 +4,9 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.view.ViewGroup
 import android.widget.NumberPicker
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,8 +14,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -37,10 +42,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.time.LocalDate
 
@@ -91,6 +99,8 @@ fun EventEditorDialog(
     var note by remember(original.id) { mutableStateOf(original.note) }
     var enabled by remember(original.id) { mutableStateOf(original.enabled) }
     var typeMenu by remember(original.id) { mutableStateOf(false) }
+    // color: null = 跟随主题；否则是 EventColors.PRESETS 的 ARGB
+    var color by remember(original.id) { mutableStateOf(original.color) }
 
     val pending = if (type == EventType.YEARLY_LUNAR) {
         original.copy(
@@ -102,6 +112,7 @@ fun EventEditorDialog(
             timeMinutes = timeMinutes,
             note = note.trim(),
             enabled = enabled,
+            color = color,
             advanceReminders = advances
         )
     } else {
@@ -114,6 +125,7 @@ fun EventEditorDialog(
             timeMinutes = timeMinutes,
             note = note.trim(),
             enabled = enabled,
+            color = color,
             advanceReminders = advances
         )
     }
@@ -341,6 +353,69 @@ fun EventEditorDialog(
                             showAdvanceAdder = false
                         }
                     )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "颜色",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(52.dp)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // 「跟随主题」选项
+                        val isDefault = color == null
+                        Box(
+                            Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .then(
+                                    if (isDefault) Modifier.border(
+                                        2.dp,
+                                        MaterialTheme.colorScheme.onSurface,
+                                        CircleShape
+                                    ) else Modifier
+                                )
+                                .clickable { color = null },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "原",
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                        EventColors.PRESETS.forEachIndexed { index, preset ->
+                            val selected = color == preset
+                            Box(
+                                Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(ComposeColor(preset))
+                                    .then(
+                                        if (selected) Modifier.border(
+                                            2.dp,
+                                            MaterialTheme.colorScheme.onSurface,
+                                            CircleShape
+                                        ) else Modifier
+                                    )
+                                    .clickable { color = preset },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selected) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = EventColors.LABELS[index],
+                                        tint = ComposeColor(0xFFFFFFFF.toInt()),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 OutlinedTextField(
