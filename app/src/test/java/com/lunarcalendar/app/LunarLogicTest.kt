@@ -128,6 +128,22 @@ class LunarLogicTest {
             CalEvent(title = "闰月生日", type = EventType.YEARLY_LUNAR, year = 2014, month = -9, day = 1),
             CalEvent(title = "阳历生日", type = EventType.YEARLY_SOLAR, year = 2024, month = 2, day = 29),
             CalEvent(title = "一次性", type = EventType.ONCE, year = 2025, month = 6, day = 1),
+            CalEvent(
+                title = "每两周",
+                type = EventType.ONCE,
+                year = 2024,
+                month = 1,
+                day = 3,
+                repeat = RepeatRule(RepeatUnit.WEEK, 2)
+            ),
+            CalEvent(
+                title = "每月",
+                type = EventType.ONCE,
+                year = 2024,
+                month = 1,
+                day = 31,
+                repeat = RepeatRule(RepeatUnit.MONTH, 1)
+            ),
             CalEvent(title = "纪念日", type = EventType.ANNIVERSARY, year = 2023, month = 2, day = 5)
         )
         for (year in 2024..2026) {
@@ -155,6 +171,62 @@ class LunarLogicTest {
             ZonedDateTime.of(2027, 3, 1, 20, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
             next
         )
+    }
+
+    @Test
+    fun repeatEveryTwoWeeksSkipsOffWeeks() {
+        val event = CalEvent(
+            title = "双周会",
+            type = EventType.ONCE,
+            year = 2026,
+            month = 11,
+            day = 2,
+            timeMinutes = 10 * 60,
+            repeat = RepeatRule(RepeatUnit.WEEK, 2)
+        )
+        assertTrue(Occurrences.occursOn(event, LocalDate.of(2026, 11, 2)))
+        assertTrue(Occurrences.occursOn(event, LocalDate.of(2026, 11, 16)))
+        assertFalse(Occurrences.occursOn(event, LocalDate.of(2026, 11, 9)))
+        // 基准日之前不触发
+        assertFalse(Occurrences.occursOn(event, LocalDate.of(2026, 10, 19)))
+
+        val from = ZonedDateTime.of(2026, 11, 3, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        assertEquals(
+            ZonedDateTime.of(2026, 11, 16, 10, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
+            Occurrences.nextTrigger(event, from)
+        )
+    }
+
+    @Test
+    fun repeatMonthlyFromMonthEndKeepsMonthEnd() {
+        val event = CalEvent(
+            title = "月底对账",
+            type = EventType.ONCE,
+            year = 2026,
+            month = 1,
+            day = 31,
+            repeat = RepeatRule(RepeatUnit.MONTH, 1)
+        )
+        assertTrue(Occurrences.occursOn(event, LocalDate.of(2026, 2, 28)))
+        assertFalse(Occurrences.occursOn(event, LocalDate.of(2026, 3, 28)))
+        assertTrue(Occurrences.occursOn(event, LocalDate.of(2026, 3, 31)))
+    }
+
+    @Test
+    fun repeatRuleSurvivesJsonRoundTrip() {
+        val event = CalEvent(
+            title = "每三天",
+            type = EventType.ONCE,
+            year = 2026,
+            month = 1,
+            day = 1,
+            repeat = RepeatRule(RepeatUnit.DAY, 3)
+        )
+        val restored = CalEvent.fromJson(event.toJson())
+        assertEquals(RepeatRule(RepeatUnit.DAY, 3), restored?.repeat)
+        assertEquals(null, CalEvent.fromJson(
+            CalEvent(title = "普通", type = EventType.ONCE, year = 2026, month = 1, day = 1).toJson()
+        )?.repeat)
     }
 
     @Test

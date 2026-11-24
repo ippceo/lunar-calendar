@@ -446,6 +446,10 @@ private fun todoSubtitle(todo: TodoItem): String {
 /** 一次性日程且触发时间已过（停用不影响过期判断）即为过期。 */
 private fun isExpired(event: CalEvent): Boolean {
     if (event.type != EventType.ONCE) return false
+    if (event.repeat != null) {
+        val next = Occurrences.nextTrigger(event.copy(enabled = true)) ?: return true
+        return !next.isAfter(ZonedDateTime.now())
+    }
     val date = event.anchorDate() ?: return true
     val now = ZonedDateTime.now()
     val trigger = date

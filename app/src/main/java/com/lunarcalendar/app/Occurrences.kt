@@ -14,6 +14,19 @@ object Occurrences {
     fun nextTrigger(event: CalEvent, from: ZonedDateTime = ZonedDateTime.now()): ZonedDateTime? {
         if (!event.enabled) return null
         val zone = from.zone
+        val rule = event.repeat
+        if (rule != null && event.type == EventType.ONCE) {
+            val base = event.anchorDate() ?: return null
+            var index = repeatIndexOnOrAfter(base, rule, from.toLocalDate())
+            var guard = 0
+            while (guard < 8) {
+                val at = atTime(repeatOccurrence(base, rule, index), event.timeMinutes, zone)
+                if (at.isAfter(from)) return at
+                index++
+                guard++
+            }
+            return null
+        }
         return when (event.type) {
             EventType.ONCE -> event.anchorDate()?.let { atTime(it, event.timeMinutes, zone) }
 
@@ -46,7 +59,10 @@ object Occurrences {
     ): ZonedDateTime? {
         if (!event.enabled) return null
         val year = from.toLocalDate().year
-        val dates = when (event.type) {
+        val rule = event.repeat
+        val dates = if (rule != null && event.type == EventType.ONCE) {
+            (year - 1..year + 9).flatMap { datesIn(event, it) }
+        } else when (event.type) {
             EventType.ONCE -> event.anchorDate()?.let { listOf(it) } ?: emptyList()
 
             EventType.YEARLY_SOLAR,
@@ -66,17 +82,25 @@ object Occurrences {
     }
 
     /** 某一天是否会发生这个提醒（用于日历打点和当日列表）。 */
-    fun occursOn(event: CalEvent, date: LocalDate): Boolean = when (event.type) {
-        EventType.ONCE -> runCatching {
-            LocalDate.of(event.year, event.month, event.day) == date
-        }.getOrDefault(false)
+    fun occursOn(event: CalEvent, date: LocalDate): Boolean {
+        val rule = event.repeat
+        if (rule != null && event.type == EventType.ONCE) {
+            val base = event.anchorDate() ?: return false
+            if (date < base) return false
+            return repeatOccurrence(base, rule, repeatIndexOnOrAfter(base, rule, date)) == date
+        }
+        return when (event.type) {
+            EventType.ONCE -> runCatching {
+                LocalDate.of(event.year, event.month, event.day) == date
+            }.getOrDefault(false)
 
-        EventType.YEARLY_SOLAR,
-        EventType.ANNIVERSARY -> safeSolarDate(date.year, event.month, event.day) == date
+            EventType.YEARLY_SOLAR,
+            EventType.ANNIVERSARY -> safeSolarDate(date.year, event.month, event.day) == date
 
-        EventType.YEARLY_LUNAR -> {
-            val lunarYear = LunarUtils.info(date).lunarYear
-            LunarUtils.solarFromLunar(lunarYear, event.month, event.day) == date
+            EventType.YEARLY_LUNAR -> {
+                val lunarYear = LunarUtils.info(date).lunarYear
+                LunarUtils.solarFromLunar(lunarYear, event.month, event.day) == date
+            }
         }
     }
 
@@ -87,6 +111,24 @@ object Occurrences {
      * 农历事件的候选农历年覆盖公历年边界，最后仍用 [occursOn] 校验，保持与逐日判定一致。
      */
     fun datesIn(event: CalEvent, year: Int): List<LocalDate> {
+        val rule = event.repeat
+        if (rule != null && event.type == EventType.ONCE) {
+            val base = event.anchorDate() ?: return emptyList()
+            val start = maxOf(base, LocalDate.of(year, 1, 1))
+            val end = LocalDate.of(year, 12, 31)
+            if (start > end) return emptyList()
+            val result = ArrayList<LocalDate>()
+            var index = repeatIndexOnOrAfter(base, rule, start)
+            var guard = 0
+            while (guard < 400) {
+                val date = repeatOccurrence(base, rule, index)
+                if (date > end) break
+                result.add(date)
+                index++
+                guard++
+            }
+            return result
+        }
         val candidates = when (event.type) {
             EventType.ONCE -> event.anchorDate()?.let { listOf(it) } ?: emptyList()
 
@@ -111,11 +153,17 @@ object Occurrences {
     }
 
     /** 重复规则文案，例如 "每年 农历十月十五"。 */
-    fun ruleText(event: CalEvent): String = when (event.type) {
-        EventType.ONCE -> "${event.year}年${event.month}月${event.day}日"
-        EventType.YEARLY_SOLAR -> "每年 ${event.month}月${event.day}日"
-        EventType.YEARLY_LUNAR -> LunarUtils.lunarRuleText(event.year, event.month, event.day)
-        EventType.ANNIVERSARY -> "每年 ${event.month}月${event.day}日（${event.year}年开始）"
+    fun ruleText(event: CalEvent): String {
+        val rule = event.repeat
+        if (rule != null && event.type == EventType.ONCE) {
+            return "${event.year}年${event.month}月${event.day}日起 ${rule.text}"
+        }
+        return when (event.type) {
+            EventType.ONCE -> "${event.year}年${event.month}月${event.day}日"
+            EventType.YEARLY_SOLAR -> "每年 ${event.month}月${event.day}日"
+            EventType.YEARLY_LUNAR -> LunarUtils.lunarRuleText(event.year, event.month, event.day)
+            EventType.ANNIVERSARY -> "每年 ${event.month}月${event.day}日（${event.year}年开始）"
+        }
     }
 
     /** 提醒列表中的“下一次”文案。 */
@@ -170,6 +218,46 @@ object Occurrences {
 
     private fun atTime(date: LocalDate, minutes: Int, zone: ZoneId): ZonedDateTime =
         date.atStartOfDay(zone).plusMinutes(minutes.toLong())
+
+    /** 重复事件的第 [index] 次（从 0 起）发生日期；月末日期由 plusMonths 自动收敛。 */
+    private fun repeatOccurrence(base: LocalDate, rule: RepeatRule, index: Long): LocalDate {
+        val step = rule.interval.coerceAtLeast(1).toLong()
+        return when (rule.unit) {
+            RepeatUnit.DAY -> base.plusDays(index * step)
+            RepeatUnit.WEEK -> base.plusWeeks(index * step)
+            RepeatUnit.MONTH -> base.plusMonths(index * step)
+        }
+    }
+
+    /** 从 [from]（含当天）起第一次符合重复规则的序号，供 [repeatOccurrence] 换算日期。 */
+    private fun repeatIndexOnOrAfter(base: LocalDate, rule: RepeatRule, from: LocalDate): Long {
+        if (from <= base) return 0L
+        val step = rule.interval.coerceAtLeast(1).toLong()
+        val index = when (rule.unit) {
+            RepeatUnit.DAY -> {
+                val days = ChronoUnit.DAYS.between(base, from)
+                (days + step - 1) / step
+            }
+
+            RepeatUnit.WEEK -> {
+                val weeks = ChronoUnit.WEEKS.between(base, from)
+                (weeks + step - 1) / step
+            }
+
+            RepeatUnit.MONTH -> {
+                val months = ChronoUnit.MONTHS.between(base, from)
+                (months + step - 1) / step
+            }
+        }
+        // plusMonths 会把 31 日收敛到月末，个别情况下结果仍早于 from，最多再向后挪几次
+        var current = index
+        var guard = 0
+        while (repeatOccurrence(base, rule, current) < from && guard < 4) {
+            current++
+            guard++
+        }
+        return current
+    }
 
     private fun safeSolarDate(year: Int, month: Int, day: Int): LocalDate {
         val safeMonth = month.coerceIn(1, 12)

@@ -31,6 +31,18 @@ object EventColors {
     fun resolve(color: Int?, fallback: Long): Long = (color?.toLong() ?: fallback) and 0xFFFFFFFFL
 }
 
+enum class RepeatUnit { DAY, WEEK, MONTH }
+
+/** 自定义重复规则：从事件日期起，每 [interval] 天 / 周 / 月重复一次。 */
+data class RepeatRule(val unit: RepeatUnit, val interval: Int = 1) {
+    val text: String
+        get() = when (unit) {
+            RepeatUnit.DAY -> if (interval == 1) "每天" else "每 $interval 天"
+            RepeatUnit.WEEK -> if (interval == 1) "每周" else "每 $interval 周"
+            RepeatUnit.MONTH -> if (interval == 1) "每月" else "每 $interval 月"
+        }
+}
+
 /** 提前提醒：在事件发生前 [daysBefore] 天的 [timeMinutes]（当天 0 点起的分钟数）提醒。 */
 data class AdvanceReminder(
     val daysBefore: Int,
@@ -73,7 +85,9 @@ data class CalEvent(
     /** 预设颜色（ARGB int）；null 表示跟随主题主色。 */
     val color: Int? = null,
     /** 提前提醒列表（最多 7 条，分别对应 1~7 天前）。 */
-    val advanceReminders: List<AdvanceReminder> = emptyList()
+    val advanceReminders: List<AdvanceReminder> = emptyList(),
+    /** 自定义重复规则；仅对 [EventType.ONCE] 生效，null 表示不重复。 */
+    val repeat: RepeatRule? = null
 ) {
     val timeText: String
         get() = "%02d:%02d".format(timeMinutes / 60, timeMinutes % 60)
@@ -89,6 +103,7 @@ data class CalEvent(
         put("note", note)
         put("enabled", enabled)
         color?.let { put("color", it) }
+        repeat?.let { put("rep", JSONObject().put("u", it.unit.name).put("n", it.interval)) }
         if (advanceReminders.isNotEmpty()) {
             put("advance", JSONArray().apply {
                 advanceReminders.forEach { item ->
@@ -109,6 +124,14 @@ data class CalEvent(
                     )
                 }.distinctBy { it.daysBefore }.sortedBy { it.daysBefore }
             } ?: emptyList()
+            val repeat = obj.optJSONObject("rep")?.let { item ->
+                runCatching {
+                    RepeatRule(
+                        unit = RepeatUnit.valueOf(item.optString("u", RepeatUnit.DAY.name)),
+                        interval = item.optInt("n", 1).coerceIn(1, 365)
+                    )
+                }.getOrNull()
+            }
             CalEvent(
                 id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
                 title = obj.optString("title"),
@@ -120,7 +143,8 @@ data class CalEvent(
                 note = obj.optString("note"),
                 enabled = obj.optBoolean("enabled", true),
                 color = if (obj.has("color") && !obj.isNull("color")) obj.optInt("color") else null,
-                advanceReminders = advance
+                advanceReminders = advance,
+                repeat = repeat
             )
         }.getOrNull()
     }

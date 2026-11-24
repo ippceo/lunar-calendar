@@ -61,6 +61,18 @@ private fun typeName(type: EventType): String = when (type) {
     EventType.ANNIVERSARY -> "纪念日"
 }
 
+/** 一次性日程可选的自定义重复规则。 */
+private val REPEAT_OPTIONS: List<RepeatRule?> = listOf(
+    null,
+    RepeatRule(RepeatUnit.DAY, 1),
+    RepeatRule(RepeatUnit.DAY, 2),
+    RepeatRule(RepeatUnit.DAY, 3),
+    RepeatRule(RepeatUnit.WEEK, 1),
+    RepeatRule(RepeatUnit.WEEK, 2),
+    RepeatRule(RepeatUnit.MONTH, 1),
+    RepeatRule(RepeatUnit.MONTH, 3),
+)
+
 @Composable
 fun EventEditorDialog(
     target: EditorTarget,
@@ -101,6 +113,8 @@ fun EventEditorDialog(
     var typeMenu by remember(original.id) { mutableStateOf(false) }
     // color: null = 跟随主题；否则是 EventColors.PRESETS 的 ARGB
     var color by remember(original.id) { mutableStateOf(original.color) }
+    var repeatRule by remember(original.id) { mutableStateOf(original.repeat) }
+    var repeatMenu by remember(original.id) { mutableStateOf(false) }
 
     val pending = if (type == EventType.YEARLY_LUNAR) {
         original.copy(
@@ -113,7 +127,8 @@ fun EventEditorDialog(
             note = note.trim(),
             enabled = enabled,
             color = color,
-            advanceReminders = advances
+            advanceReminders = advances,
+            repeat = if (type == EventType.ONCE) repeatRule else null
         )
     } else {
         original.copy(
@@ -126,7 +141,8 @@ fun EventEditorDialog(
             note = note.trim(),
             enabled = enabled,
             color = color,
-            advanceReminders = advances
+            advanceReminders = advances,
+            repeat = if (type == EventType.ONCE) repeatRule else null
         )
     }
 
@@ -186,6 +202,7 @@ fun EventEditorDialog(
                                         lunarDay = li.lunarDay
                                     }
                                     type = candidate
+                                    if (candidate != EventType.ONCE) repeatRule = null
                                     typeMenu = false
                                 }
                             )
@@ -254,6 +271,48 @@ fun EventEditorDialog(
                             ).show()
                         }) {
                             Text("${date.year}年${date.monthValue}月${date.dayOfMonth}日")
+                        }
+                    }
+                }
+
+                if (type == EventType.ONCE) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "重复",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.width(52.dp)
+                        )
+                        Box(Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { repeatMenu = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = repeatRule?.text ?: "不重复",
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Start
+                                )
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择重复规则")
+                            }
+                            DropdownMenu(
+                                expanded = repeatMenu,
+                                onDismissRequest = { repeatMenu = false }
+                            ) {
+                                REPEAT_OPTIONS.forEach { candidate ->
+                                    DropdownMenuItem(
+                                        text = { Text(candidate?.text ?: "不重复") },
+                                        trailingIcon = {
+                                            if (repeatRule == candidate) {
+                                                Icon(Icons.Filled.Check, contentDescription = null)
+                                            }
+                                        },
+                                        onClick = {
+                                            repeatRule = candidate
+                                            repeatMenu = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
