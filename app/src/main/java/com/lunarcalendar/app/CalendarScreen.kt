@@ -84,8 +84,11 @@ fun CalendarScreen(
             .coerceIn(0, pageCount - 1)
     ) { pageCount }
 
-    // 外部改变年月（拨盘、左右按钮、选中其它月份日期）时，滚动到对应页；跨越多页时直接定位
-    LaunchedEffect(cursor) {
+    var viewMode by rememberSaveable { mutableIntStateOf(0) } // 0 = 月视图, 1 = 年视图
+
+    // 月视图才同步月分页；年视图选择日期时不能让隐藏的月分页把月份回写
+    LaunchedEffect(cursor, viewMode) {
+        if (viewMode != 0) return@LaunchedEffect
         val target = ChronoUnit.MONTHS.between(startMonth, cursor).toInt()
             .coerceIn(0, pageCount - 1)
         val distance = abs(target - pagerState.currentPage)
@@ -95,15 +98,18 @@ fun CalendarScreen(
             else -> pagerState.animateScrollToPage(target)
         }
     }
-    // 手势滑动停稳后，把当前页同步回外层状态
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, viewMode) {
+        if (viewMode != 0) return@LaunchedEffect
+        var lastPage = pagerState.settledPage
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            onJumpToMonth(startMonth.plusMonths(page.toLong()))
+            if (page != lastPage) {
+                lastPage = page
+                onJumpToMonth(startMonth.plusMonths(page.toLong()))
+            }
         }
     }
 
     var showMonthPicker by rememberSaveable { mutableStateOf(false) }
-    var viewMode by rememberSaveable { mutableIntStateOf(0) } // 0 = 月视图, 1 = 年视图
     var showAdjacent by rememberSaveable { mutableStateOf(false) }
     var viewMenu by rememberSaveable { mutableStateOf(false) }
 
@@ -152,8 +158,6 @@ fun CalendarScreen(
                 onTitleClick = { showMonthPicker = true },
                 yearOnly = true
             )
-            Spacer(Modifier.height(4.dp))
-            WeekdayHeader()
             Spacer(Modifier.height(6.dp))
             YearPager(
                 cursor = cursor,
@@ -417,6 +421,31 @@ private fun WeekdayHeader() {
 }
 
 @Composable
+private fun MiniWeekdayHeader() {
+    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(12.dp)
+    ) {
+        labels.forEachIndexed { index, label ->
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                fontSize = 7.sp,
+                maxLines = 1,
+                color = if (index >= 5) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun YearPager(
     cursor: YearMonth,
     selected: LocalDate,
@@ -443,7 +472,7 @@ private fun YearPager(
         state = pager,
         modifier = Modifier
             .fillMaxWidth()
-            .height(772.dp)
+            .height(580.dp)
     ) { page ->
         YearGrid(
             year = MIN_YEAR + page,
@@ -466,13 +495,13 @@ private fun YearGrid(
     onSelect: (LocalDate) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (row in 0 until 6) {
+        for (row in 0 until 4) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                for (column in 0 until 2) {
-                    val index = row * 2 + column + 1
+                for (column in 0 until 3) {
+                    val index = row * 3 + column + 1
                     MiniMonth(
                         month = YearMonth.of(year, index),
                         highlightedMonth = month,
@@ -510,21 +539,22 @@ private fun MiniMonth(
     val isCurrent = month.monthValue == highlightedMonth
 
     Box(
-        modifier = modifier.height(120.dp),
+        modifier = modifier.height(136.dp),
         contentAlignment = Alignment.Center
     ) {
-        // 月份数字直接作为背景水印，不再单独占一行
+        // 月份作为背景水印，不额外占用标题行
         Text(
             text = "${month.monthValue}月",
-            fontSize = 30.sp,
+            fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
             color = if (isCurrent) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
             } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.09f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.13f)
             }
         )
         Column(Modifier.fillMaxWidth()) {
+            MiniWeekdayHeader()
             for (row in 0 until 6) {
                 Row(Modifier.fillMaxWidth()) {
                     for (column in 0 until 7) {
@@ -559,6 +589,10 @@ private fun MiniDayCell(
     Box(
         modifier = modifier
             .height(20.dp)
+            .clip(CircleShape)
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+            )
             .clickable(enabled = inMonth && !isSelected, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -569,24 +603,14 @@ private fun MiniDayCell(
             date.dayOfWeek.value >= 6 -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.onSurface
         }
-        Box(
-            modifier = Modifier
-                .size(17.dp)
-                .clip(CircleShape)
-                .background(
-                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = date.dayOfMonth.toString(),
-                fontSize = 10.sp,
-                maxLines = 1,
-                softWrap = false,
-                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = color
-            )
-        }
+        Text(
+            text = date.dayOfMonth.toString(),
+            fontSize = 9.sp,
+            maxLines = 1,
+            softWrap = false,
+            fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = color
+        )
         if (hasEvent && !isSelected) {
             Box(
                 Modifier
