@@ -1,11 +1,13 @@
 package com.lunarcalendar.app
 
 import com.nlf.calendar.Lunar
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -319,5 +321,52 @@ class LunarLogicTest {
             ZonedDateTime.of(2027, 3, 7, 9, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
             Occurrences.nextAdvanceTrigger(event, reminder, from)
         )
+    }
+
+    @Test
+    fun importClampsOutOfRangeTime() {
+        val obj = JSONObject().apply {
+            put("type", "ONCE")
+            put("year", 2026)
+            put("month", 6)
+            put("day", 1)
+            put("time", 1440)
+        }
+        val event = CalEvent.fromJson(obj)
+        assertTrue(event != null)
+        assertTrue(event!!.timeMinutes in 0..(24 * 60 - 1))
+    }
+
+    @Test
+    fun backupRoundTripPreservesData() {
+        val events = listOf(
+            CalEvent(
+                title = "测试",
+                type = EventType.ONCE,
+                year = 2026,
+                month = 6,
+                day = 1,
+                note = "备注"
+            )
+        )
+        val todos = listOf(
+            TodoItem(title = "待办", note = "备注", done = true)
+        )
+        val text = DataBackup.exportJson(events, todos)
+        val restored = DataBackup.parseJson(text)
+        assertTrue(restored != null)
+        assertEquals(1, restored!!.events.size)
+        assertEquals("测试", restored.events[0].title)
+        assertEquals(1, restored.todos.size)
+        assertTrue(restored.todos[0].done)
+    }
+
+    @Test
+    fun atTimeUsesWallClockNotElapsedMinutes() {
+        // 纽约 2026-03-08 02:00 跳夏令时，本地 09:00 应仍然是 09:00，不是 10:00
+        val zone = ZoneId.of("America/New_York")
+        val date = LocalDate.of(2026, 3, 8)
+        val result = date.atTime(9, 0).atZone(zone)
+        assertEquals(LocalDateTime.of(2026, 3, 8, 9, 0), result.toLocalDateTime())
     }
 }

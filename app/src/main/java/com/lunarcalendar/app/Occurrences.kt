@@ -216,8 +216,9 @@ object Occurrences {
     fun fullDateText(date: LocalDate): String =
         "${date.year}年${date.monthValue}月${date.dayOfMonth}日 ${weekdayName(date)}"
 
+    /** 用本地时间语义构造：夏令时跳变日不会被偏移。 */
     private fun atTime(date: LocalDate, minutes: Int, zone: ZoneId): ZonedDateTime =
-        date.atStartOfDay(zone).plusMinutes(minutes.toLong())
+        date.atTime(minutes / 60, minutes % 60).atZone(zone)
 
     /** 重复事件的第 [index] 次（从 0 起）发生日期；月末日期由 plusMonths 自动收敛。 */
     private fun repeatOccurrence(base: LocalDate, rule: RepeatRule, index: Long): LocalDate {

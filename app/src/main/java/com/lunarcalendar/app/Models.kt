@@ -139,7 +139,7 @@ data class CalEvent(
                 year = obj.optInt("year"),
                 month = obj.optInt("month"),
                 day = obj.optInt("day"),
-                timeMinutes = obj.optInt("time", 9 * 60),
+                timeMinutes = obj.optInt("time", 9 * 60).coerceIn(0, 24 * 60 - 1),
                 note = obj.optString("note"),
                 enabled = obj.optBoolean("enabled", true),
                 color = if (obj.has("color") && !obj.isNull("color")) obj.optInt("color") else null,

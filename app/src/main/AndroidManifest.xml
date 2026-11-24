@@ -79,6 +79,11 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_todo_info" />
         </receiver>
+
+        <!-- 非导出接收器：只有本应用能触发待办勾选 -->
+        <receiver
+            android:name=".ui.widget.TodoToggleReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

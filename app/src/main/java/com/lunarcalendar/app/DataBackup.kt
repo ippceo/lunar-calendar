@@ -52,8 +52,11 @@ object DataBackup {
         BackupData(events, todos)
     }.getOrNull()
 
+    /** 用 "wt" 模式截断写入，避免覆盖长文件时残留尾部字节；流为 null 时返回失败。 */
     fun writeToUri(context: Context, uri: Uri, text: String): Boolean = runCatching {
-        context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
+        val stream = context.contentResolver.openOutputStream(uri, "wt")
+            ?: return@runCatching false
+        stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
         true
     }.getOrDefault(false)
 

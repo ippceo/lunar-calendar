@@ -3,6 +3,7 @@ package com.lunarcalendar.app.ui.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -70,6 +71,11 @@ class TodoWidgetProvider : AppWidgetProvider() {
                 ComponentName(context, TodoWidgetProvider::class.java)
             )
             ids.forEach { updateWidget(context, manager, it) }
+        }
+
+        /** 供 [TodoToggleReceiver] 调用的公开入口。 */
+        fun handleToggle(context: Context, todoId: String?) {
+            toggleTodo(context, todoId)
         }
 
         private fun toggleTodo(context: Context, todoId: String?) {
@@ -152,7 +158,7 @@ class TodoWidgetProvider : AppWidgetProvider() {
             index: Int,
             todoId: String
         ): PendingIntent {
-            val intent = Intent(context, TodoWidgetProvider::class.java).apply {
+            val intent = Intent(context, TodoToggleReceiver::class.java).apply {
                 action = ACTION_TOGGLE
                 data = Uri.parse("lunarcalendar://todo-widget/$widgetId/$index")
                 putExtra(EXTRA_TODO_ID, todoId)
@@ -176,6 +182,18 @@ class TodoWidgetProvider : AppWidgetProvider() {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+        }
+    }
+}
+
+/**
+ * 非导出的内部接收器：只有本应用能触发待办勾选。
+ * 外部应用无法通过显式广播进入此路径。
+ */
+class TodoToggleReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == TodoWidgetProvider.ACTION_TOGGLE) {
+            TodoWidgetProvider.handleToggle(context, intent.getStringExtra("todo_id"))
         }
     }
 }
