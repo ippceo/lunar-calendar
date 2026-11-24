@@ -10,6 +10,32 @@ import android.content.Context
 object AppSettings {
     private const val PREFS = "lunar_calendar"
     private const val KEY_EXCLUDE_FROM_RECENTS = "exclude_from_recents"
+    private const val KEY_WEEK_START = "week_start"
+    private const val KEY_ACCENT = "accent"
+
+    /** 一周起始日：0 = 周一，1 = 周日。 */
+    fun weekStart(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_WEEK_START, 0)
+
+    fun setWeekStart(context: Context, value: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_WEEK_START, value)
+            .apply()
+    }
+
+    /** 主题色序号，对应 MainActivity 中的预设列表。 */
+    fun accent(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_ACCENT, 0)
+
+    fun setAccent(context: Context, value: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_ACCENT, value)
+            .apply()
+    }
 
     /** 是否从系统最近任务（多任务）列表中隐藏。默认不隐藏。 */
     fun excludeFromRecents(context: Context): Boolean =

@@ -12,8 +12,8 @@ android {
         applicationId = "com.lunarcalendar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "2.0-beta"
+        versionCode = 17
+        versionName = "2.1"
     }
 
     signingConfigs {
@@ -32,7 +32,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

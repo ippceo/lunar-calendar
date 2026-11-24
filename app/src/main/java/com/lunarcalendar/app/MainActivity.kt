@@ -19,10 +19,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -63,10 +65,16 @@ class MainActivity : ComponentActivity() {
         AppSettings.applyExcludeFromRecents(this)
         enableEdgeToEdge()
         setContent {
-            LunarCalendarTheme {
+            var accent by remember { mutableIntStateOf(AppSettings.accent(this@MainActivity)) }
+            LunarCalendarTheme(accent) {
                 CalendarApp(
                     deepLink = deepLink.value,
-                    onDeepLinkHandled = { deepLink.value = null }
+                    onDeepLinkHandled = { deepLink.value = null },
+                    accent = accent,
+                    onAccentChange = { value ->
+                        accent = value
+                        AppSettings.setAccent(this@MainActivity, value)
+                    }
                 )
             }
         }
@@ -94,33 +102,74 @@ private data class DeepLink(
     val todoId: String? = null
 )
 
-private val LightColors = lightColorScheme(
-    primary = Color(0xFFB3261E),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDAD6),
-    onPrimaryContainer = Color(0xFF410002),
-    secondary = Color(0xFF775651),
-    background = Color(0xFFFFFBF8),
-    surface = Color(0xFFFFFBF8),
-    surfaceVariant = Color(0xFFF5DDDA),
-    onSurfaceVariant = Color(0xFF534341)
+/** 主题色预设：名称 + 主色，供设置页展示。 */
+internal val AccentOptions: List<Pair<String, Color>> = listOf(
+    "拾光红" to Color(0xFFB3261E),
+    "黛蓝" to Color(0xFF1D4ED8),
+    "松绿" to Color(0xFF047857),
+    "紫罗兰" to Color(0xFF7C3AED),
+    "琥珀" to Color(0xFFB45309)
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFFFB4AB),
-    onPrimary = Color(0xFF690005),
-    primaryContainer = Color(0xFF93000A),
-    onPrimaryContainer = Color(0xFFFFDAD6),
-    background = Color(0xFF201A19),
-    surface = Color(0xFF201A19)
+private data class AccentPalette(
+    val lightPrimary: Color,
+    val lightContainer: Color,
+    val lightOnContainer: Color,
+    val darkPrimary: Color,
+    val darkOnPrimary: Color,
+    val darkContainer: Color
+)
+
+private val Accents = listOf(
+    AccentPalette(
+        Color(0xFFB3261E), Color(0xFFFFDAD6), Color(0xFF410002),
+        Color(0xFFFFB4AB), Color(0xFF690005), Color(0xFF93000A)
+    ),
+    AccentPalette(
+        Color(0xFF1D4ED8), Color(0xFFDBEAFE), Color(0xFF172554),
+        Color(0xFF93C5FD), Color(0xFF0B2E6F), Color(0xFF1E40AF)
+    ),
+    AccentPalette(
+        Color(0xFF047857), Color(0xFFD1FAE5), Color(0xFF064E3B),
+        Color(0xFF6EE7B7), Color(0xFF064E3B), Color(0xFF065F46)
+    ),
+    AccentPalette(
+        Color(0xFF7C3AED), Color(0xFFEDE9FE), Color(0xFF4C1D95),
+        Color(0xFFC4B5FD), Color(0xFF2E1065), Color(0xFF5B21B6)
+    ),
+    AccentPalette(
+        Color(0xFFB45309), Color(0xFFFEF3C7), Color(0xFF78350F),
+        Color(0xFFFCD34D), Color(0xFF451A03), Color(0xFF92400E)
+    )
 )
 
 @Composable
-fun LunarCalendarTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        content = content
-    )
+fun LunarCalendarTheme(accent: Int = 0, content: @Composable () -> Unit) {
+    val palette = Accents[accent.coerceIn(0, Accents.lastIndex)]
+    val dark = isSystemInDarkTheme()
+    val scheme = if (dark) {
+        darkColorScheme(
+            primary = palette.darkPrimary,
+            onPrimary = palette.darkOnPrimary,
+            primaryContainer = palette.darkContainer,
+            onPrimaryContainer = Color(0xFFFFDAD6),
+            background = Color(0xFF201A19),
+            surface = Color(0xFF201A19)
+        )
+    } else {
+        lightColorScheme(
+            primary = palette.lightPrimary,
+            onPrimary = Color.White,
+            primaryContainer = palette.lightContainer,
+            onPrimaryContainer = palette.lightOnContainer,
+            secondary = Color(0xFF775651),
+            background = Color(0xFFFFFBF8),
+            surface = Color(0xFFFFFBF8),
+            surfaceVariant = Color(0xFFF5DDDA),
+            onSurfaceVariant = Color(0xFF534341)
+        )
+    }
+    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 /** 旋转屏幕 / 进程重建后仍能保留当前查看的日期与月份。 */
@@ -138,7 +187,9 @@ private val YearMonthSaver = Saver<YearMonth, String>(
 @Composable
 private fun CalendarApp(
     deepLink: DeepLink?,
-    onDeepLinkHandled: () -> Unit
+    onDeepLinkHandled: () -> Unit,
+    accent: Int,
+    onAccentChange: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -159,6 +210,8 @@ private fun CalendarApp(
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
     var todoEditorTarget by remember { mutableStateOf<TodoEditorTarget?>(null) }
     var permissionTick by remember { mutableIntStateOf(0) }
+    var weekStart by remember { mutableIntStateOf(AppSettings.weekStart(context)) }
+    var searchOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(deepLink) {
         val link = deepLink ?: return@LaunchedEffect
@@ -246,6 +299,9 @@ private fun CalendarApp(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { searchOpen = true }) {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    }
                     TextButton(onClick = {
                         today = LocalDate.now()
                         selected = today
@@ -318,6 +374,7 @@ private fun CalendarApp(
                     selected = selected,
                     today = today,
                     events = events,
+                    weekStart = weekStart,
                     onSelect = { date ->
                         selected = date
                         cursor = YearMonth.from(date)
@@ -367,6 +424,13 @@ private fun CalendarApp(
                     events = events,
                     todos = todos,
                     permissionTick = permissionTick,
+                    accent = accent,
+                    onAccentChange = onAccentChange,
+                    weekStart = weekStart,
+                    onWeekStartChange = { value ->
+                        weekStart = value
+                        AppSettings.setWeekStart(context, value)
+                    },
                     onSaveAll = { newEvents, newTodos -> persist(newEvents); persistTodos(newTodos) }
                 )
             }
@@ -411,6 +475,28 @@ private fun CalendarApp(
             onDelete = { todo ->
                 todoEditorTarget = null
                 persistTodos(todos.filterNot { it.id == todo.id })
+            }
+        )
+    }
+
+    if (searchOpen) {
+        SearchDialog(
+            events = events,
+            todos = todos,
+            onDismiss = { searchOpen = false },
+            onPickEvent = { event ->
+                searchOpen = false
+                val date = Occurrences.nextTrigger(event)?.toLocalDate()
+                    ?: runCatching { LocalDate.of(event.year, event.month, event.day) }.getOrNull()
+                    ?: today
+                selected = date
+                cursor = YearMonth.from(date)
+                tab = 0
+            },
+            onPickTodo = {
+                searchOpen = false
+                tab = 1
+                reminderSubTab = 3
             }
         )
     }

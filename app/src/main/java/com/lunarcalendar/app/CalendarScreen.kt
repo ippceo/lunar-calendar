@@ -71,6 +71,7 @@ fun CalendarScreen(
     selected: LocalDate,
     today: LocalDate,
     events: List<CalEvent>,
+    weekStart: Int = 0,
     onSelect: (LocalDate) -> Unit,
     onMonthChange: (Long) -> Unit,
     onJumpToMonth: (YearMonth) -> Unit,
@@ -112,19 +113,22 @@ fun CalendarScreen(
         }
     }
 
-    // 周视图分页：以 Monday 为起点一周算一页
+    // 周视图分页：默认以周一为起点，可在设置中改为周日
+    val firstWeekday = if (weekStart == 0) java.time.DayOfWeek.MONDAY else java.time.DayOfWeek.SUNDAY
+    val weekAnchor = startMonth.atDay(1)
+        .with(TemporalAdjusters.previousOrSame(firstWeekday))
     val weekPageCount = (MAX_YEAR - MIN_YEAR + 1) * 54 + 2
     val weekPagerState = rememberPagerState(
         initialPage = ChronoUnit.WEEKS.between(
-            startMonth.atDay(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)),
-            selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            weekAnchor,
+            selected.with(TemporalAdjusters.previousOrSame(firstWeekday))
         ).toInt().coerceIn(0, weekPageCount - 1)
     ) { weekPageCount }
     LaunchedEffect(selected, viewMode) {
         if (viewMode != 2) return@LaunchedEffect
         val target = ChronoUnit.WEEKS.between(
-            startMonth.atDay(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)),
-            selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            weekAnchor,
+            selected.with(TemporalAdjusters.previousOrSame(firstWeekday))
         ).toInt().coerceIn(0, weekPageCount - 1)
         if (weekPagerState.currentPage != target) weekPagerState.scrollToPage(target)
     }
@@ -171,7 +175,7 @@ fun CalendarScreen(
                     onMonthChange = onMonthChange,
                     onTitleClick = { showMonthPicker = true }
                 )
-                WeekdayHeader()
+                WeekdayHeader(weekStart)
                 Spacer(Modifier.height(2.dp))
                 HorizontalPager(
                     state = pagerState,
@@ -186,6 +190,7 @@ fun CalendarScreen(
                         today = today,
                         enabledEvents = enabledEvents,
                         showAdjacent = showAdjacent,
+                        weekStart = weekStart,
                         onSelect = onSelect
                     )
                 }
@@ -203,13 +208,14 @@ fun CalendarScreen(
                     selected = selected,
                     today = today,
                     enabledEvents = enabledEvents,
+                    weekStart = weekStart,
                     onSelect = onSelect,
                     onYearChange = onYearChange
                 )
             }
             2 -> { // 周视图
-                val weekStart = selected.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
-                val weekEnd = weekStart.plusDays(6)
+                val weekBegin = selected.with(TemporalAdjusters.previousOrSame(firstWeekday))
+                val weekEnd = weekBegin.plusDays(6)
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -222,7 +228,7 @@ fun CalendarScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "${weekStart.monthValue}月${weekStart.dayOfMonth}日 – ${weekEnd.monthValue}月${weekEnd.dayOfMonth}日",
+                            text = "${weekBegin.monthValue}月${weekBegin.dayOfMonth}日 – ${weekEnd.monthValue}月${weekEnd.dayOfMonth}日",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -233,7 +239,7 @@ fun CalendarScreen(
                 }
                 WeekPager(
                     pagerState = weekPagerState,
-                    dayStart = dayStartDate,
+                    dayStart = weekAnchor,
                     selected = selected,
                     today = today,
                     enabledEvents = enabledEvents,
@@ -505,17 +511,21 @@ private const val MIN_YEAR = 1900
 private const val MAX_YEAR = 2100
 
 @Composable
-private fun WeekdayHeader() {
-    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+private fun WeekdayHeader(weekStart: Int = 0) {
+    val labels = if (weekStart == 0) {
+        listOf("一", "二", "三", "四", "五", "六", "日")
+    } else {
+        listOf("日", "一", "二", "三", "四", "五", "六")
+    }
     Row(Modifier.fillMaxWidth()) {
-        labels.forEachIndexed { index, label ->
+        labels.forEach { label ->
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
-                color = if (index >= 5) {
+                color = if (label == "六" || label == "日") {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -526,14 +536,18 @@ private fun WeekdayHeader() {
 }
 
 @Composable
-private fun MiniWeekdayHeader() {
-    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
+private fun MiniWeekdayHeader(weekStart: Int = 0) {
+    val labels = if (weekStart == 0) {
+        listOf("一", "二", "三", "四", "五", "六", "日")
+    } else {
+        listOf("日", "一", "二", "三", "四", "五", "六")
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .height(14.dp)
     ) {
-        labels.forEachIndexed { index, label ->
+        labels.forEach { label ->
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),
@@ -541,7 +555,7 @@ private fun MiniWeekdayHeader() {
                 fontSize = 8.sp,
                 lineHeight = 10.sp,
                 maxLines = 1,
-                color = if (index >= 5) {
+                color = if (label == "六" || label == "日") {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
@@ -557,6 +571,7 @@ private fun YearPager(
     selected: LocalDate,
     today: LocalDate,
     enabledEvents: List<CalEvent>,
+    weekStart: Int,
     onSelect: (LocalDate) -> Unit,
     onYearChange: (Int) -> Unit
 ) {
@@ -588,6 +603,7 @@ private fun YearPager(
             selected = selected,
             today = today,
             enabledEvents = enabledEvents,
+            weekStart = weekStart,
             onSelect = onSelect
         )
     }
@@ -600,6 +616,7 @@ private fun YearGrid(
     selected: LocalDate,
     today: LocalDate,
     enabledEvents: List<CalEvent>,
+    weekStart: Int,
     onSelect: (LocalDate) -> Unit
 ) {
     // 整年一次性展开，避免每个 MiniMonth 各自扫描 42 天
@@ -620,6 +637,7 @@ private fun YearGrid(
                         selected = selected,
                         today = today,
                         eventDays = eventDays,
+                        weekStart = weekStart,
                         onSelect = onSelect,
                         modifier = Modifier.weight(1f)
                     )
@@ -636,12 +654,13 @@ private fun MiniMonth(
     selected: LocalDate,
     today: LocalDate,
     eventDays: Set<LocalDate>,
+    weekStart: Int,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier
 ) {
     val firstDay = month.atDay(1)
-    val leading = firstDay.dayOfWeek.value - 1
-    val dates = remember(month) {
+    val leading = (firstDay.dayOfWeek.value - 1 - weekStart + 7) % 7
+    val dates = remember(month, weekStart) {
         val start = firstDay.minusDays(leading.toLong())
         (0 until 42).map { start.plusDays(it.toLong()) }
     }
@@ -668,7 +687,7 @@ private fun MiniMonth(
             }
         )
         Column(Modifier.fillMaxWidth()) {
-            MiniWeekdayHeader()
+            MiniWeekdayHeader(weekStart)
             for (row in 0 until 6) {
                 Row(Modifier.fillMaxWidth()) {
                     for (column in 0 until 7) {
@@ -751,12 +770,13 @@ private fun MonthPage(
     today: LocalDate,
     enabledEvents: List<CalEvent>,
     showAdjacent: Boolean,
+    weekStart: Int = 0,
     onSelect: (LocalDate) -> Unit
 ) {
     val firstDay = cursor.atDay(1)
-    // 一周从周一开始：周一 = 0 … 周日 = 6
-    val leading = firstDay.dayOfWeek.value - 1
-    val dates = remember(cursor) {
+    // 一周从周一或周日开始：leading 为当月 1 号之前的空格数
+    val leading = (firstDay.dayOfWeek.value - 1 - weekStart + 7) % 7
+    val dates = remember(cursor, weekStart) {
         val start = firstDay.minusDays(leading.toLong())
         (0 until 42).map { start.plusDays(it.toLong()) }
     }

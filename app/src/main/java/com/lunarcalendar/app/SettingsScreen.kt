@@ -11,8 +11,10 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,11 +22,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -36,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -47,14 +56,89 @@ fun SettingsScreen(
     events: List<CalEvent>,
     todos: List<TodoItem>,
     permissionTick: Int,
+    accent: Int,
+    onAccentChange: (Int) -> Unit,
+    weekStart: Int,
+    onWeekStartChange: (Int) -> Unit,
     onSaveAll: (List<CalEvent>, List<TodoItem>) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item { AppearanceCard(accent, onAccentChange, weekStart, onWeekStartChange) }
         item { ReliabilityCard(permissionTick) }
         item { DataBackupCard(events, todos, onSaveAll) }
+    }
+}
+
+@Composable
+private fun AppearanceCard(
+    accent: Int,
+    onAccentChange: (Int) -> Unit,
+    weekStart: Int,
+    onWeekStartChange: (Int) -> Unit
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = "外观与显示",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "主题色",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AccentOptions.forEachIndexed { index, (name, color) ->
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .clickable { onAccentChange(index) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (index == accent) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = name,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "每周起始日",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0 to "周一", 1 to "周日").forEach { (value, label) ->
+                    val selected = weekStart == value
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onWeekStartChange(value) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "影响月视图、年视图和周视图的排列，以及周视图的翻页",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
