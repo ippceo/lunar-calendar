@@ -426,14 +426,15 @@ private fun MiniWeekdayHeader() {
     Row(
         Modifier
             .fillMaxWidth()
-            .height(12.dp)
+            .height(14.dp)
     ) {
         labels.forEachIndexed { index, label ->
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                fontSize = 7.sp,
+                fontSize = 8.sp,
+                lineHeight = 10.sp,
                 maxLines = 1,
                 color = if (index >= 5) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
