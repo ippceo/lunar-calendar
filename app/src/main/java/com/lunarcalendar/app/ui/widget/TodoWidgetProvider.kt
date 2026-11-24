@@ -193,7 +193,15 @@ class TodoWidgetProvider : AppWidgetProvider() {
 class TodoToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == TodoWidgetProvider.ACTION_TOGGLE) {
-            TodoWidgetProvider.handleToggle(context, intent.getStringExtra("todo_id"))
+            val todoId = intent.getStringExtra("todo_id")
+            TodoWidgetProvider.handleToggle(context, todoId)
+            // 从通知栏「完成」进入时，同步收起对应通知
+            if (todoId != null) {
+                runCatching {
+                    androidx.core.app.NotificationManagerCompat.from(context)
+                        .cancel("todo:$todoId", 0)
+                }
+            }
         }
     }
 }

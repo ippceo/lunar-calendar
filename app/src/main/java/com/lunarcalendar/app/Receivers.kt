@@ -3,8 +3,9 @@ package com.lunarcalendar.app
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.app.NotificationManagerCompat
 
-/** 闹钟到点：发本地通知，并把“每年”类型的提醒排到下一年。 */
+/** 闹钟到点：发本地通知，并让重复日程续排下一次。 */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID) ?: return
@@ -17,10 +18,9 @@ class ReminderReceiver : BroadcastReceiver() {
             advanceDays = intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0)
         )
 
-        if (event.type != EventType.ONCE) {
-            // 刚触发的时间点已经过去，从 1 分钟后开始找下一次，避免重复提醒。
-            ReminderScheduler.schedule(context, event, java.time.ZonedDateTime.now().plusMinutes(1))
-        }
+        // 无条件尝试续排：重复日程从 1 分钟后找到下一次；
+        // 一次性事件时间已过去，schedule() 自然不会再设新闹钟。
+        ReminderScheduler.schedule(context, event, java.time.ZonedDateTime.now().plusMinutes(1))
     }
 }
 
@@ -32,6 +32,38 @@ class TodoReminderReceiver : BroadcastReceiver() {
         if (todo.done) return
         Notifications.showTodo(context, todo)
         com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
+    }
+}
+
+/**
+ * 稍后提醒：通知栏点击「稍后」后，按分钟数设一个临时闹钟重新提醒。
+ * 不改动原日程/待办时间，只补发一次通知。
+ */
+class SnoozeReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val minutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 10)
+        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+        val todoId = intent.getStringExtra(EXTRA_TODO_ID)
+        when {
+            eventId != null -> {
+                EventRepository.load(context).firstOrNull { it.id == eventId }?.let { event ->
+                    if (event.enabled) ReminderScheduler.snooze(context, event, minutes)
+                }
+                runCatching { NotificationManagerCompat.from(context).cancel(eventId, 0) }
+            }
+
+            todoId != null -> {
+                TodoRepository.load(context).firstOrNull { it.id == todoId }?.let { todo ->
+                    if (!todo.done) TodoScheduler.snooze(context, todo, minutes)
+                }
+                runCatching { NotificationManagerCompat.from(context).cancel("todo:$todoId", 0) }
+            }
+        }
+    }
+
+    companion object {
+        const val ACTION_SNOOZE = "com.lunarcalendar.app.action.SNOOZE"
+        const val EXTRA_SNOOZE_MINUTES = "snooze_minutes"
     }
 }
 

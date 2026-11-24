@@ -71,13 +71,15 @@ fun CalendarScreen(
     selected: LocalDate,
     today: LocalDate,
     events: List<CalEvent>,
+    todos: List<TodoItem>,
     weekStart: Int = 0,
     onSelect: (LocalDate) -> Unit,
     onMonthChange: (Long) -> Unit,
     onJumpToMonth: (YearMonth) -> Unit,
     onYearChange: (Int) -> Unit,
     onEditEvent: (CalEvent) -> Unit,
-    onDeleteEvent: (CalEvent) -> Unit
+    onDeleteEvent: (CalEvent) -> Unit,
+    onOpenTodo: () -> Unit
 ) {
     val enabledEvents = remember(events) { events.filter { it.enabled } }
     val startMonth = remember { YearMonth.of(MIN_YEAR, 1) }
@@ -276,6 +278,15 @@ fun CalendarScreen(
                     onSelect = onSelect
                 )
             }
+            4 -> { // 近期：未来 7/30 天的日程与待办
+                UpcomingView(
+                    today = today,
+                    events = enabledEvents,
+                    todos = todos,
+                    onSelectDate = onSelect,
+                    onOpenTodo = onOpenTodo
+                )
+            }
         }
         if (viewMode != 3) {
             Spacer(Modifier.height(10.dp))
@@ -316,6 +327,7 @@ private fun ViewModeBar(
         1 -> "年视图"
         2 -> "周视图"
         3 -> "日视图"
+        4 -> "近期"
         else -> "月视图"
     }
     Row(
@@ -345,7 +357,7 @@ private fun ViewModeBar(
                 expanded = menuOpen,
                 onDismissRequest = { onMenuOpenChange(false) }
             ) {
-                listOf(0 to "月视图", 1 to "年视图", 2 to "周视图", 3 to "日视图").forEach { (mode, label) ->
+                listOf(0 to "月视图", 1 to "年视图", 2 to "周视图", 3 to "日视图", 4 to "近期").forEach { (mode, label) ->
                     DropdownMenuItem(
                         text = { Text(label) },
                         trailingIcon = {
@@ -1208,6 +1220,18 @@ private fun DayDetail(
                         text = info.jieQi,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            // 节气倒计时：15 天内才显示，避免「距冬至还有 200 天」这种噪音
+            LunarUtils.nextSolarTerm(date)?.let { (termName, daysLeft) ->
+                if (daysLeft in 0..15) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = if (daysLeft == 0) "今天是$termName" else "距$termName 还有 $daysLeft 天",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

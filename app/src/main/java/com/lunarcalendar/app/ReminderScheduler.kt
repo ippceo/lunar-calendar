@@ -60,6 +60,31 @@ object ReminderScheduler {
         }
     }
 
+    /**
+     * 稍后提醒：另设一个一次性临时闹钟到点重发通知，不改动原日程时间，
+     * 也不影响正常排期的下一次提醒。走主提醒通道（[ReminderReceiver]），
+     * 到点后同样会自动续排下一次。
+     */
+    fun snooze(context: Context, event: CalEvent, minutes: Int) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+        val at = java.time.ZonedDateTime.now().plusMinutes(minutes.toLong().coerceAtLeast(1))
+        setAlarm(alarmManager, at.toInstant().toEpochMilli(), snoozePendingIntent(context, event.id))
+    }
+
+    private fun snoozePendingIntent(context: Context, eventId: String): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            // data 与正常槽位不同，取消/重建时互不影响
+            data = Uri.parse("lunarcalendar://event/$eventId/snooze")
+            putExtra(EXTRA_EVENT_ID, eventId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            "$eventId#snooze".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun setAlarm(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {

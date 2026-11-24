@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,6 +70,7 @@ fun SettingsScreen(
         item { AppearanceCard(accent, onAccentChange, weekStart, onWeekStartChange) }
         item { ReliabilityCard(permissionTick) }
         item { DataBackupCard(events, todos, onSaveAll) }
+        item { AutoBackupCard(events, todos, onSaveAll) }
     }
 }
 
@@ -296,6 +298,105 @@ private fun DataBackupCard(
         }
     }
 }
+
+@Composable
+private fun AutoBackupCard(
+    events: List<CalEvent>,
+    todos: List<TodoItem>,
+    onSaveAll: (List<CalEvent>, List<TodoItem>) -> Unit
+) {
+    val context = LocalContext.current
+    // permissionTick 变化（如从编辑页返回）时刷新备份列表
+    var backups by remember { mutableStateOf(DataBackup.listAutoBackups(context)) }
+    var confirmTarget by remember { mutableStateOf<DataBackup.AutoBackup?>(null) }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = "自动备份",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "每次改动后自动保存到应用私有目录，保留最近 ${DataBackup.AUTO_KEEP} 份。备份只存本机；重要数据仍建议定期导出成文件。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+
+            if (backups.isEmpty()) {
+                Text(
+                    text = "还没有备份；新增或修改日程、待办后会自动生成",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    backups.take(DataBackup.AUTO_KEEP).forEach { backup ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = formatBackupTime(backup.time),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = "${backup.events} 条提醒 · ${backup.todos} 条待办",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            OutlinedButton(onClick = { confirmTarget = backup }) {
+                                Text("恢复")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    confirmTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmTarget = null },
+            title = { Text("恢复这份备份？") },
+            text = {
+                Text(
+                    "将恢复 ${formatBackupTime(target.time)} 的备份" +
+                        "（${target.events} 条提醒、${target.todos} 条待办）。" +
+                        "按 id 合并：同一条覆盖，新条目追加。"
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val data = DataBackup.readAutoBackup(context, target.fileName)
+                    if (data != null) {
+                        onSaveAll(
+                            DataBackup.merge(events, data.events),
+                            DataBackup.mergeTodos(todos, data.todos)
+                        )
+                        Toast.makeText(context, "已从备份恢复", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "备份已损坏，无法恢复", Toast.LENGTH_LONG).show()
+                    }
+                    confirmTarget = null
+                    backups = DataBackup.listAutoBackups(context)
+                }) { Text("恢复") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { confirmTarget = null }) { Text("取消") }
+            }
+        )
+    }
+}
+
+private fun formatBackupTime(time: java.time.LocalDateTime): String =
+    "${time.monthValue}月${time.dayOfMonth}日 %02d:%02d".format(time.hour, time.minute)
 
 @Composable
 private fun PermissionRow(title: String, granted: Boolean, onClick: () -> Unit) {

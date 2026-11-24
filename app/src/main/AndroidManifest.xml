@@ -84,6 +84,11 @@
         <receiver
             android:name=".ui.widget.TodoToggleReceiver"
             android:exported="false" />
+
+        <!-- 非导出接收器：通知栏「稍后提醒」临时闹钟 -->
+        <receiver
+            android:name=".SnoozeReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

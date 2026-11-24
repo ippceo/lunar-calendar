@@ -80,4 +80,79 @@ object DataBackup {
 
     fun backupFileName(): String =
         "lunar-calendar-backup-${java.time.LocalDate.now()}.json"
+
+    // ============ 自动备份：应用私有目录，滚动保留最近数份 ============
+
+    private const val BACKUP_DIR = "backups"
+    private const val AUTO_PREFIX = "auto-"
+    const val AUTO_KEEP = 7
+
+    /** 一份自动备份的概要。 */
+    data class AutoBackup(
+        val fileName: String,
+        val events: Int,
+        val todos: Int,
+        val time: java.time.LocalDateTime
+    )
+
+    /**
+     * 数据变化后自动备份到应用私有目录（filesDir/backups），
+     * 滚动保留最近 [AUTO_KEEP] 份。失败静默，不影响主流程。
+     */
+    fun autoBackup(context: Context, events: List<CalEvent>, todos: List<TodoItem>) {
+        runCatching {
+            val dir = java.io.File(context.filesDir, BACKUP_DIR).apply { mkdirs() }
+            val stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+            java.io.File(dir, "$AUTO_PREFIX$stamp.json").writeText(exportJson(events, todos))
+            pruneBackups(dir)
+        }
+    }
+
+    /**
+     * 纯函数：按文件名升序保留最新 [keep] 份，返回应删除的文件名。
+     * 只处理 auto-*.json，避免误删用户放进去的其他文件。
+     */
+    fun pruneBackupNames(names: List<String>, keep: Int): List<String> {
+        val valid = names.filter { it.startsWith(AUTO_PREFIX) && it.endsWith(".json") }.sorted()
+        return if (valid.size <= keep) emptyList() else valid.take(valid.size - keep)
+    }
+
+    private fun pruneBackups(dir: java.io.File) {
+        pruneBackupNames(dir.list()?.toList() ?: emptyList(), AUTO_KEEP).forEach { name ->
+            runCatching { java.io.File(dir, name).delete() }
+        }
+    }
+
+    /** 列出所有自动备份概要，最新在前；解析失败的文件跳过。 */
+    fun listAutoBackups(context: Context): List<AutoBackup> = runCatching {
+        val dir = java.io.File(context.filesDir, BACKUP_DIR)
+        val files = dir.listFiles { f ->
+            f.name.startsWith(AUTO_PREFIX) && f.name.endsWith(".json")
+        } ?: return emptyList()
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+        files.mapNotNull { file ->
+            val data = parseJson(file.readText()) ?: return@mapNotNull null
+            AutoBackup(
+                fileName = file.name,
+                events = data.events.size,
+                todos = data.todos.size,
+                time = runCatching {
+                    java.time.LocalDateTime.parse(
+                        file.name.removePrefix(AUTO_PREFIX).removeSuffix(".json"),
+                        formatter
+                    )
+                }.getOrDefault(java.time.LocalDateTime.MIN)
+            )
+        }.sortedByDescending { it.time }
+    }.getOrDefault(emptyList())
+
+    /** 读取一份自动备份；只接受合法文件名，避免路径穿越。 */
+    fun readAutoBackup(context: Context, fileName: String): BackupData? {
+        if (!fileName.startsWith(AUTO_PREFIX) || !fileName.endsWith(".json")) return null
+        if (fileName.contains('/') || fileName.contains('\\')) return null
+        return runCatching {
+            parseJson(java.io.File(java.io.File(context.filesDir, BACKUP_DIR), fileName).readText())
+        }.getOrNull()
+    }
 }

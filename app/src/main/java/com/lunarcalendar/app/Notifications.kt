@@ -78,6 +78,8 @@ object Notifications {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
+            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 10))
+            .addAction(0, "稍后 1 小时", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 60))
             .build()
 
         runCatching {
@@ -126,10 +128,42 @@ object Notifications {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
+            .addAction(0, "完成", completeTodoIntent(context, todo.id))
+            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = null, todoId = todo.id, minutes = 10))
             .build()
 
         runCatching {
             NotificationManagerCompat.from(context).notify("todo:${todo.id}", 0, notification)
         }
+    }
+
+    /** 「稍后」操作：发到非导出的 [SnoozeReceiver]，设临时闹钟并收起当前通知。 */
+    private fun snoozeIntent(context: Context, eventId: String?, todoId: String?, minutes: Int): PendingIntent {
+        val intent = Intent(context, SnoozeReceiver::class.java).apply {
+            action = SnoozeReceiver.ACTION_SNOOZE
+            if (eventId != null) putExtra(EXTRA_EVENT_ID, eventId)
+            if (todoId != null) putExtra(EXTRA_TODO_ID, todoId)
+            putExtra(SnoozeReceiver.EXTRA_SNOOZE_MINUTES, minutes)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            "snooze:${eventId ?: todoId}:$minutes".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    /** 「完成」操作：复用非导出的待办勾选接收器，通知栏直接完成待办。 */
+    private fun completeTodoIntent(context: Context, todoId: String): PendingIntent {
+        val intent = Intent(context, com.lunarcalendar.app.ui.widget.TodoToggleReceiver::class.java).apply {
+            action = com.lunarcalendar.app.ui.widget.TodoWidgetProvider.ACTION_TOGGLE
+            putExtra(EXTRA_TODO_ID, todoId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            "complete:$todoId".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 }

@@ -369,4 +369,118 @@ class LunarLogicTest {
         val result = date.atTime(9, 0).atZone(zone)
         assertEquals(LocalDateTime.of(2026, 3, 8, 9, 0), result.toLocalDateTime())
     }
+
+    @Test
+    fun dailyRepeatReschedulesNextDay() {
+        // 配合 Receivers 无条件续排的回归：到点触发 1 分钟后，应能算出明天的同一次时间
+        val event = CalEvent(
+            title = "吃药",
+            type = EventType.ONCE,
+            year = 2026,
+            month = 5,
+            day = 1,
+            timeMinutes = 8 * 60,
+            repeat = RepeatRule(RepeatUnit.DAY, 1)
+        )
+        val firedAt = ZonedDateTime.of(2026, 5, 10, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        assertEquals(
+            ZonedDateTime.of(2026, 5, 11, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
+            Occurrences.nextTrigger(event, firedAt.plusMinutes(1))
+        )
+        // 一次性过期事件：nextTrigger 返回原时间（过去），ReminderScheduler.schedule()
+        // 里的 isAfter(now) 检查会拦住它，不会设出过去的闹钟
+        val once = CalEvent(
+            title = "过期",
+            type = EventType.ONCE,
+            year = 2026,
+            month = 5,
+            day = 1,
+            timeMinutes = 8 * 60
+        )
+        val pastTrigger = Occurrences.nextTrigger(once, firedAt.plusMinutes(1))
+        assertEquals(
+            ZonedDateTime.of(2026, 5, 1, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai")),
+            pastTrigger
+        )
+        assertTrue(pastTrigger!!.isBefore(firedAt))
+    }
+
+    @Test
+    fun pruneBackupNamesKeepsLatest() {
+        val names = (1..9).map { "auto-20261124-00000$it.json" }
+        val removed = DataBackup.pruneBackupNames(names, 7)
+        assertEquals(
+            listOf("auto-20261124-000001.json", "auto-20261124-000002.json"),
+            removed
+        )
+        assertTrue(DataBackup.pruneBackupNames(names.take(7), 7).isEmpty())
+        // 非 auto 前缀的文件不参与清理
+        assertTrue(
+            DataBackup.pruneBackupNames(listOf("user.json", "auto-20261124-000001.json"), 0)
+                .singleOrNull() == "auto-20261124-000001.json"
+        )
+    }
+
+    @Test
+    fun upcomingGroupsEventsAndTodosByDay() {
+        val today = LocalDate.of(2026, 11, 24)
+        val events = listOf(
+            CalEvent(
+                title = "今天日程",
+                type = EventType.ONCE,
+                year = 2026,
+                month = 11,
+                day = 24,
+                timeMinutes = 9 * 60
+            ),
+            CalEvent(
+                title = "后天日程",
+                type = EventType.ONCE,
+                year = 2026,
+                month = 11,
+                day = 26,
+                timeMinutes = 10 * 60
+            )
+        )
+        val todos = listOf(
+            TodoItem(title = "过期待办", dueAt = LocalDateTime.of(2026, 11, 23, 18, 0)),
+            TodoItem(title = "明天待办", dueAt = LocalDateTime.of(2026, 11, 25, 9, 30)),
+            TodoItem(title = "已完成", dueAt = LocalDateTime.of(2026, 11, 24, 8, 0), done = true),
+            TodoItem(title = "无时间待办")
+        )
+        val days = buildUpcomingDays(today, events, todos, 7)
+
+        // 今天：过期待办置顶 + 今天日程
+        val first = days.first()
+        assertEquals(today, first.date)
+        assertEquals(listOf("过期待办", "今天日程"), first.items.map { it.title })
+
+        // 明天：只有待办
+        val tomorrow = days.first { it.date == LocalDate.of(2026, 11, 25) }
+        assertEquals(listOf("明天待办"), tomorrow.items.map { it.title })
+
+        // 后天：只有日程
+        val day26 = days.first { it.date == LocalDate.of(2026, 11, 26) }
+        assertEquals(listOf("后天日程"), day26.items.map { it.title })
+
+        // 无事项的日子被跳过，已完成/无时间待办不出现
+        assertFalse(days.any { it.date == LocalDate.of(2026, 11, 27) })
+        assertFalse(days.flatMap { it.items }.any { it.title == "已完成" })
+        assertFalse(days.flatMap { it.items }.any { it.title == "无时间待办" })
+
+        // 30 天窗口不会比 7 天窗口少
+        assertTrue(buildUpcomingDays(today, events, todos, 30).size >= days.size)
+    }
+
+    @Test
+    fun solarTermCountdownIsSane() {
+        val result = LunarUtils.nextSolarTerm(LocalDate.of(2026, 12, 1))
+        assertTrue(result != null)
+        val (name, days) = result!!
+        assertTrue("节气名不应为空", name.isNotEmpty())
+        assertTrue("天数应在 0..366 之间: $days", days in 0..366)
+        // 冬至前一周内的探测点，下一个节气不超过 90 天
+        val around = LunarUtils.nextSolarTerm(LocalDate.of(2026, 12, 22))
+        assertTrue(around != null && around!!.second in 0..90)
+    }
 }

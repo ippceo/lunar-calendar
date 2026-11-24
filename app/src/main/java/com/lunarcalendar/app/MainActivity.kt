@@ -276,6 +276,7 @@ private fun CalendarApp(
         EventRepository.save(context, updated)
         ReminderScheduler.rescheduleAll(context, updated)
         com.lunarcalendar.app.ui.widget.LunarWidgetProvider.forceRefreshAll(context)
+        DataBackup.autoBackup(context, updated, todos)
     }
 
     fun persistTodos(updated: List<TodoItem>) {
@@ -283,6 +284,7 @@ private fun CalendarApp(
         TodoRepository.save(context, updated)
         TodoScheduler.rescheduleAll(context, updated)
         com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
+        DataBackup.autoBackup(context, events, updated)
     }
 
     Scaffold(
@@ -374,6 +376,7 @@ private fun CalendarApp(
                     selected = selected,
                     today = today,
                     events = events,
+                    todos = todos,
                     weekStart = weekStart,
                     onSelect = { date ->
                         selected = date
@@ -398,6 +401,10 @@ private fun CalendarApp(
                     },
                     onDeleteEvent = { event ->
                         persist(events.filterNot { it.id == event.id })
+                    },
+                    onOpenTodo = {
+                        tab = 1
+                        reminderSubTab = 3
                     }
                 )
             } else if (tab == 1) {

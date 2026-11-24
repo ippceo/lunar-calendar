@@ -119,4 +119,16 @@ object LunarUtils {
     /** 生成农历重复事件的文字描述，例如 "每年 农历十月十五"。 */
     fun lunarRuleText(year: Int, month: Int, day: Int): String =
         "每年 农历${monthLabelOf(month)}${dayNameOf(day)}"
+
+    /**
+     * 距下一个节气（24 节气，含中气）的名称与天数。
+     * 当天正好是节气时返回 (名称, 0)。库异常时返回 null。
+     */
+    fun nextSolarTerm(from: LocalDate): Pair<String, Int>? = runCatching {
+        val lunar = Solar.fromYmd(from.year, from.monthValue, from.dayOfMonth).lunar
+        val jq = lunar.nextJieQi
+        val solar = jq.solar
+        val target = LocalDate.of(solar.year, solar.month, solar.day)
+        jq.name to java.time.temporal.ChronoUnit.DAYS.between(from, target).toInt()
+    }.getOrNull()
 }

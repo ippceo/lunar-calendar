@@ -31,6 +31,23 @@ object TodoScheduler {
         alarmManager.cancel(pendingIntent(context, todoId))
     }
 
+    /** 稍后提醒：另设一次性临时闹钟到点重发待办通知，不改动原待办的截止时间。 */
+    fun snooze(context: Context, todo: TodoItem, minutes: Int) {
+        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+        val at = java.time.ZonedDateTime.now().plusMinutes(minutes.toLong().coerceAtLeast(1))
+        val intent = Intent(context, TodoReminderReceiver::class.java).apply {
+            data = Uri.parse("lunarcalendar://todo/${todo.id}/snooze")
+            putExtra(EXTRA_TODO_ID, todo.id)
+        }
+        val pi = PendingIntent.getBroadcast(
+            context,
+            "${todo.id}#snooze".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        setAlarm(alarmManager, at.toInstant().toEpochMilli(), pi)
+    }
+
     private fun setAlarm(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
