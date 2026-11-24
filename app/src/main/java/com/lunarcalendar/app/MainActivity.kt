@@ -1,6 +1,7 @@
 package com.lunarcalendar.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -54,17 +55,44 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 class MainActivity : ComponentActivity() {
+    private val deepLink = mutableStateOf<DeepLink?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deepLink.value = readDeepLink(intent)
         AppSettings.applyExcludeFromRecents(this)
         enableEdgeToEdge()
         setContent {
             LunarCalendarTheme {
-                CalendarApp()
+                CalendarApp(
+                    deepLink = deepLink.value,
+                    onDeepLinkHandled = { deepLink.value = null }
+                )
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deepLink.value = readDeepLink(intent)
+    }
+
+    private fun readDeepLink(intent: Intent): DeepLink? {
+        val eventId = intent.getStringExtra(Notifications.EXTRA_EVENT_ID)
+        val todoId = intent.getStringExtra(Notifications.EXTRA_TODO_ID)
+        return when {
+            eventId != null -> DeepLink(eventId = eventId)
+            todoId != null -> DeepLink(todoId = todoId)
+            else -> null
+        }
+    }
 }
+
+private data class DeepLink(
+    val eventId: String? = null,
+    val todoId: String? = null
+)
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFFB3261E),
@@ -108,7 +136,10 @@ private val YearMonthSaver = Saver<YearMonth, String>(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CalendarApp() {
+private fun CalendarApp(
+    deepLink: DeepLink?,
+    onDeepLinkHandled: () -> Unit
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -128,6 +159,28 @@ private fun CalendarApp() {
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
     var todoEditorTarget by remember { mutableStateOf<TodoEditorTarget?>(null) }
     var permissionTick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(deepLink) {
+        val link = deepLink ?: return@LaunchedEffect
+        if (link.eventId != null) {
+            tab = 1
+            events.firstOrNull { it.id == link.eventId }?.let { event ->
+                reminderSubTab = when (event.type) {
+                    EventType.ONCE -> 0
+                    EventType.YEARLY_SOLAR, EventType.YEARLY_LUNAR -> 1
+                    EventType.ANNIVERSARY -> 2
+                }
+                editorTarget = EditorTarget(event, isNew = false)
+            }
+        } else if (link.todoId != null) {
+            tab = 1
+            reminderSubTab = 3
+            todos.firstOrNull { it.id == link.todoId }?.let { todo ->
+                todoEditorTarget = TodoEditorTarget(todo, isNew = false)
+            }
+        }
+        onDeepLinkHandled()
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()

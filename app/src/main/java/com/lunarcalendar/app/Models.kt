@@ -105,6 +105,14 @@ fun CalEvent.anchorDate(): LocalDate? = when (type) {
     else -> runCatching { LocalDate.of(year, month, day) }.getOrNull()
 }
 
+/** 到 [nextDate] 这次生日时满多少岁；农历生日先换算出公历出生日期。 */
+fun CalEvent.birthdayAge(nextDate: LocalDate): Int? {
+    if (year < 1900) return null
+    val birthDate = anchorDate() ?: return null
+    val age = nextDate.year - birthDate.year
+    return if (age in 0..150) age else null
+}
+
 fun CalEvent.typeLabel(): String = when (type) {
     EventType.ONCE -> "一次性日程"
     EventType.YEARLY_SOLAR -> "每年 · 阳历"

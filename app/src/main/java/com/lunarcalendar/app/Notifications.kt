@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -16,6 +17,8 @@ import java.time.LocalDate
 /** 本地通知，不经过 FCM / 任何推送通道。 */
 object Notifications {
     private const val CHANNEL_ID = "calendar_reminders"
+    const val EXTRA_EVENT_ID = "com.lunarcalendar.app.extra.EVENT_ID"
+    const val EXTRA_TODO_ID = "com.lunarcalendar.app.extra.TODO_ID"
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -55,10 +58,12 @@ object Notifications {
         }
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            data = Uri.parse("lunarcalendar://notification/event/${Uri.encode(event.id)}")
+            putExtra(EXTRA_EVENT_ID, event.id)
         }
         val contentIntent = PendingIntent.getActivity(
             context,
-            0,
+            event.id.hashCode(),
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -101,10 +106,12 @@ object Notifications {
         }
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            data = Uri.parse("lunarcalendar://notification/todo/${Uri.encode(todo.id)}")
+            putExtra(EXTRA_TODO_ID, todo.id)
         }
         val contentIntent = PendingIntent.getActivity(
             context,
-            0,
+            todo.id.hashCode(),
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

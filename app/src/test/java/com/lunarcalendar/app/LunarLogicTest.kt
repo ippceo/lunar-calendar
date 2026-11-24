@@ -103,6 +103,24 @@ class LunarLogicTest {
     }
 
     @Test
+    fun lunarBirthdayAgeUsesSolarBirthYear() {
+        val event = CalEvent(
+            title = "腊月生日",
+            type = EventType.YEARLY_LUNAR,
+            year = 1985,
+            month = 12,
+            day = 3
+        )
+        val birthDate = event.anchorDate()
+        assertEquals(1986, birthDate?.year)
+
+        val from = ZonedDateTime.of(2026, 11, 24, 8, 0, 0, 0, ZoneId.of("Asia/Shanghai"))
+        val nextDate = Occurrences.nextTrigger(event, from)?.toLocalDate()
+        assertEquals(2027, nextDate?.year)
+        assertEquals(41, event.birthdayAge(nextDate!!))
+    }
+
+    @Test
     fun nextTriggerForYearlySolarSkipsToNextYear() {
         val event = CalEvent(
             title = "纪念日",

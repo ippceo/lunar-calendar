@@ -15,6 +15,7 @@ import com.lunarcalendar.app.EventRepository
 import com.lunarcalendar.app.EventType
 import com.lunarcalendar.app.Occurrences
 import com.lunarcalendar.app.R
+import com.lunarcalendar.app.birthdayAge
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
@@ -242,7 +243,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
                     rv.setTextViewText(R.id.w_header, title)
                     rv.setTextViewText(R.id.w_number, numberText)
                     rv.setTextViewText(R.id.w_unit, unitText)
-                    val age = next?.let { birthdayAge(event, it.toLocalDate()) }
+                    val age = next?.let { event.birthdayAge(it.toLocalDate()) }
                     if (age != null) {
                         rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
                         rv.setTextViewText(R.id.w_secondary, "$age 岁")
@@ -262,13 +263,6 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val thisYear = safeDate(today.year, event.month, event.day)
             val next = if (thisYear.isBefore(today)) safeDate(today.year + 1, event.month, event.day) else thisYear
             return ChronoUnit.DAYS.between(today, next)
-        }
-
-        /** 下次生日时的年龄；年份明显不合理（如旧数据）时返回 null。 */
-        private fun birthdayAge(event: CalEvent, nextDate: LocalDate): Int? {
-            if (event.year < 1900) return null
-            val age = nextDate.year - event.year
-            return if (age in 0..150) age else null
         }
 
         private fun safeDate(year: Int, month: Int, day: Int): LocalDate {
