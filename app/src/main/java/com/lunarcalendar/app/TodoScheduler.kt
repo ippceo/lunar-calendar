@@ -20,7 +20,11 @@ object TodoScheduler {
     fun schedule(context: Context, todo: TodoItem) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         alarmManager.cancel(pendingIntent(context, todo.id))
-        if (todo.done || todo.dueAt == null) return
+        if (todo.done || todo.dueAt == null) {
+            // 完成/去掉时间后，撤销尚未触发的一次性「稍后提醒」
+            alarmManager.cancel(snoozePendingIntent(context, todo.id))
+            return
+        }
         val triggerAt = todo.dueAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         if (triggerAt <= System.currentTimeMillis()) return
         setAlarm(alarmManager, triggerAt, pendingIntent(context, todo.id))
@@ -29,23 +33,27 @@ object TodoScheduler {
     fun cancel(context: Context, todoId: String) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         alarmManager.cancel(pendingIntent(context, todoId))
+        alarmManager.cancel(snoozePendingIntent(context, todoId))
     }
 
     /** 稍后提醒：另设一次性临时闹钟到点重发待办通知，不改动原待办的截止时间。 */
     fun snooze(context: Context, todo: TodoItem, minutes: Int) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val at = java.time.ZonedDateTime.now().plusMinutes(minutes.toLong().coerceAtLeast(1))
+        setAlarm(alarmManager, at.toInstant().toEpochMilli(), snoozePendingIntent(context, todo.id))
+    }
+
+    private fun snoozePendingIntent(context: Context, todoId: String): PendingIntent {
         val intent = Intent(context, TodoReminderReceiver::class.java).apply {
-            data = Uri.parse("lunarcalendar://todo/${todo.id}/snooze")
-            putExtra(EXTRA_TODO_ID, todo.id)
+            data = Uri.parse("lunarcalendar://todo/$todoId/snooze")
+            putExtra(EXTRA_TODO_ID, todoId)
         }
-        val pi = PendingIntent.getBroadcast(
+        return PendingIntent.getBroadcast(
             context,
-            "${todo.id}#snooze".hashCode(),
+            "$todoId#snooze".hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        setAlarm(alarmManager, at.toInstant().toEpochMilli(), pi)
     }
 
     private fun setAlarm(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {

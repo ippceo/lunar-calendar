@@ -490,10 +490,17 @@ class LunarLogicTest {
      */
     @Test
     fun snoozePayloadUsesReceiverKeys() {
-        val eventPayload = snoozePayload(eventId = "e1", todoId = null, minutes = 10, advanceDays = 3)
+        val eventPayload = snoozePayload(
+            eventId = "e1",
+            todoId = null,
+            minutes = 10,
+            advanceDays = 3,
+            targetDate = LocalDate.of(2026, 11, 28)
+        )
         assertEquals("e1", eventPayload[EXTRA_EVENT_ID])
         assertEquals(10, eventPayload[SnoozeReceiver.EXTRA_SNOOZE_MINUTES])
         assertEquals(3, eventPayload[EXTRA_ADVANCE_DAYS])
+        assertEquals("2026-11-28", eventPayload[EXTRA_TARGET_DATE])
         assertFalse(eventPayload.containsKey(EXTRA_TODO_ID))
 
         val todoPayload = snoozePayload(eventId = null, todoId = "t1", minutes = 60, advanceDays = 0)
@@ -501,6 +508,7 @@ class LunarLogicTest {
         assertEquals(60, todoPayload[SnoozeReceiver.EXTRA_SNOOZE_MINUTES])
         assertFalse(todoPayload.containsKey(EXTRA_EVENT_ID))
         assertFalse(todoPayload.containsKey(EXTRA_ADVANCE_DAYS))
+        assertFalse(todoPayload.containsKey(EXTRA_TARGET_DATE))
     }
 
     @Test
@@ -508,5 +516,63 @@ class LunarLogicTest {
         val payload = completePayload("t1")
         assertEquals("t1", payload[EXTRA_TODO_ID])
         assertEquals(1, payload.size)
+    }
+
+    /** 「明天 9:00」档位按绝对时刻换算，晚间提醒不应退化成 24 小时。 */
+    @Test
+    fun snoozeUntilTomorrowIsNextMorning() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val evening = ZonedDateTime.of(2026, 11, 25, 20, 0, 0, 0, zone)
+        assertEquals(13 * 60, minutesUntilNextMorning(evening))
+
+        val morning = ZonedDateTime.of(2026, 11, 25, 8, 0, 0, 0, zone)
+        assertEquals(25 * 60, minutesUntilNextMorning(morning))
+    }
+
+    /** 三伏 / 数九 / 闰月标注来自离线农历库，需固定示例防止算法换版后静默变空。 */
+    @Test
+    fun traditionalSeasonNotesAreCorrect() {
+        assertEquals("初伏第6天", LunarUtils.info(LocalDate.of(2026, 7, 20)).specialNote)
+        assertEquals("三九第2天", LunarUtils.info(LocalDate.of(2027, 1, 10)).specialNote)
+        assertTrue(LunarUtils.info(LocalDate.of(2026, 11, 25)).specialNote == null)
+
+        val leap = LunarUtils.info(LocalDate.of(2025, 7, 25))
+        assertTrue(leap.isLeapMonth)
+        assertEquals("闰六月", leap.monthLabel)
+        assertFalse(LunarUtils.info(LocalDate.of(2026, 11, 25)).isLeapMonth)
+    }
+
+    /** 导入策略：覆盖整体替换，合并保留未出现在文件里的旧条目。 */
+    @Test
+    fun importStrategiesBehaveAsExpected() {
+        val existing = listOf(
+            CalEvent(id = "e1", title = "旧标题", type = EventType.ONCE, year = 2026, month = 1, day = 1)
+        )
+        val imported = listOf(
+            CalEvent(id = "e1", title = "新标题", type = EventType.ONCE, year = 2026, month = 1, day = 1),
+            CalEvent(id = "e2", title = "新增", type = EventType.ONCE, year = 2026, month = 2, day = 2)
+        )
+
+        val overwritten = DataBackup.applyImport(existing, imported, DataBackup.ImportStrategy.OVERWRITE)
+        assertEquals(2, overwritten.size)
+        assertEquals("新标题", overwritten.first { it.id == "e1" }.title)
+
+        val merged = DataBackup.applyImport(existing, imported, DataBackup.ImportStrategy.MERGE)
+        assertEquals(2, merged.size)
+        assertEquals("新标题", merged.first { it.id == "e1" }.title)
+
+        val keptExisting = DataBackup.applyImport(
+            existing + CalEvent(id = "e3", title = "本机独有", type = EventType.ONCE, year = 2026, month = 3, day = 3),
+            imported,
+            DataBackup.ImportStrategy.MERGE
+        )
+        assertTrue(keptExisting.any { it.id == "e3" })
+
+        val todosOverwritten = DataBackup.applyImportTodos(
+            listOf(TodoItem(id = "t1", title = "旧待办")),
+            listOf(TodoItem(id = "t2", title = "新待办")),
+            DataBackup.ImportStrategy.OVERWRITE
+        )
+        assertEquals(listOf("t2"), todosOverwritten.map { it.id })
     }
 }

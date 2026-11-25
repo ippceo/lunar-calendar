@@ -1246,6 +1246,20 @@ private fun DayDetail(
                 )
             }
 
+            // 闰月 / 三伏 / 数九等传统时段标注，没有时不占位
+            val traditionalTags = buildList {
+                if (info.isLeapMonth) add("闰月")
+                info.specialNote?.let { add(it) }
+            }
+            if (traditionalTags.isNotEmpty()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = traditionalTags.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             HorizontalDivider(
                 Modifier.padding(vertical = 12.dp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)

@@ -11,11 +11,10 @@ class ReminderReceiver : BroadcastReceiver() {
         val event = EventRepository.load(context).firstOrNull { it.id == eventId } ?: return
         if (!event.enabled) return
 
-        Notifications.showReminder(
-            context,
-            event,
-            advanceDays = intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0)
-        )
+        val targetDate = intent.getStringExtra(EXTRA_TARGET_DATE)
+            ?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+            ?: java.time.LocalDate.now().plusDays(intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0).toLong())
+        Notifications.showReminder(context, event, targetDate)
 
         // 无条件尝试续排：重复日程从 1 分钟后找到下一次；
         // 一次性事件时间已过去，schedule() 自然不会再设新闹钟。
@@ -42,12 +41,16 @@ class SnoozeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val minutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 10)
         val advanceDays = intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0)
+        val targetDate = intent.getStringExtra(EXTRA_TARGET_DATE)
+            ?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val todoId = intent.getStringExtra(EXTRA_TODO_ID)
         when {
             eventId != null -> {
                 EventRepository.load(context).firstOrNull { it.id == eventId }?.let { event ->
-                    if (event.enabled) ReminderScheduler.snooze(context, event, minutes, advanceDays)
+                    if (event.enabled) {
+                        ReminderScheduler.snooze(context, event, minutes, advanceDays, targetDate)
+                    }
                 }
                 Notifications.cancelEvent(context, eventId)
             }

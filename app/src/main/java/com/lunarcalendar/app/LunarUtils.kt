@@ -19,10 +19,15 @@ object LunarUtils {
         val zodiac: String,
         val jieQi: String,
         val festivals: List<String>,
-        val otherFestivals: List<String>
+        val otherFestivals: List<String>,
+        /** 是否处于闰月（lunarMonth 为负数）。 */
+        val isLeapMonth: Boolean = false,
+        /** 三伏 / 数九 等传统时段标注，例如 "初伏第6天"、"三九第2天"。 */
+        val specialNote: String? = null
     ) {
         val monthLabel: String
-            get() = if (lunarMonth < 0) "闰${monthName}月" else "${monthName}月"
+            // lunar-java 的 monthInChinese 对闰月已带「闰」前缀（如「闰六」），避免拼成「闰闰六月」
+            get() = if (lunarMonth < 0 && !monthName.startsWith("闰")) "闰${monthName}月" else "${monthName}月"
 
         val fullLunarText: String
             get() = "农历${ganZhiYear}年 $monthLabel$dayName"
@@ -44,6 +49,9 @@ object LunarUtils {
         cache[date]?.let { return it }
         val solar = Solar.fromYmd(date.year, date.monthValue, date.dayOfMonth)
         val lunar = solar.lunar
+        // 三伏 / 数九 由 lunar-java 自带算法给出，非这两个时段时返回 null
+        val fu = runCatching { lunar.fu }.getOrNull()
+        val shuJiu = runCatching { lunar.shuJiu }.getOrNull()
         val info = Info(
             lunarYear = lunar.year,
             lunarMonth = lunar.month,
@@ -54,7 +62,13 @@ object LunarUtils {
             zodiac = lunar.yearShengXiao,
             jieQi = lunar.jieQi,
             festivals = (lunar.festivals + solar.festivals).distinct(),
-            otherFestivals = lunar.otherFestivals.distinct()
+            otherFestivals = lunar.otherFestivals.distinct(),
+            isLeapMonth = lunar.month < 0,
+            specialNote = when {
+                fu != null -> "${fu.name}第${fu.index}天"
+                shuJiu != null -> "${shuJiu.name}第${shuJiu.index}天"
+                else -> null
+            }
         )
         cache[date] = info
         return info

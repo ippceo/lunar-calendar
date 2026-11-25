@@ -272,10 +272,15 @@ private fun CalendarApp(
     }
 
     fun persist(updated: List<CalEvent>) {
+        val updatedIds = updated.mapTo(HashSet()) { it.id }
         // 删除或编辑过的日程：收起已经投递的提醒，避免留下点进去找不到的僵尸通知
         events.forEach { previous ->
             if (updated.firstOrNull { it.id == previous.id } != previous) {
                 Notifications.cancelEvent(context, previous.id)
+            }
+            // 被删除的日程要同时撤销系统闹钟（含未触发的「稍后提醒」）
+            if (previous.id !in updatedIds) {
+                ReminderScheduler.cancel(context, previous.id)
             }
         }
         events = updated
@@ -286,9 +291,13 @@ private fun CalendarApp(
     }
 
     fun persistTodos(updated: List<TodoItem>) {
+        val updatedIds = updated.mapTo(HashSet()) { it.id }
         todos.forEach { previous ->
             if (updated.firstOrNull { it.id == previous.id } != previous) {
                 Notifications.cancelTodo(context, previous.id)
+            }
+            if (previous.id !in updatedIds) {
+                TodoScheduler.cancel(context, previous.id)
             }
         }
         todos = updated

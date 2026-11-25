@@ -78,6 +78,27 @@ object DataBackup {
         return byId.values.toList()
     }
 
+    /** 导入策略：覆盖 = 用文件内容整体替换；合并 = 同 id 以文件为准、其余保留。 */
+    enum class ImportStrategy { OVERWRITE, MERGE }
+
+    fun applyImport(
+        existing: List<CalEvent>,
+        imported: List<CalEvent>,
+        strategy: ImportStrategy
+    ): List<CalEvent> = when (strategy) {
+        ImportStrategy.OVERWRITE -> imported
+        ImportStrategy.MERGE -> merge(existing, imported)
+    }
+
+    fun applyImportTodos(
+        existing: List<TodoItem>,
+        imported: List<TodoItem>,
+        strategy: ImportStrategy
+    ): List<TodoItem> = when (strategy) {
+        ImportStrategy.OVERWRITE -> imported
+        ImportStrategy.MERGE -> mergeTodos(existing, imported)
+    }
+
     fun backupFileName(): String =
         "lunar-calendar-backup-${java.time.LocalDate.now()}.json"
 

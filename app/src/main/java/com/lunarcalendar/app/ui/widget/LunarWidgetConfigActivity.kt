@@ -77,6 +77,7 @@ class LunarWidgetConfigActivity : ComponentActivity() {
         val initialMode = LunarWidgetProvider.getMode(this, widgetId)
         val initialEventId = LunarWidgetProvider.getEventId(this, widgetId)
         val initialAnniv = LunarWidgetProvider.getAnnivPrimary(this, widgetId)
+        val initialLayout = LunarWidgetProvider.getLayoutMode(this, widgetId)
         val events = EventRepository.load(this).filter { it.enabled }
         val now = ZonedDateTime.now()
 
@@ -89,6 +90,7 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                     var mode by remember { mutableStateOf(initialMode) }
                     var eventId by remember { mutableStateOf(initialEventId) }
                     var annivPrimary by remember { mutableStateOf(initialAnniv) }
+                    var layoutMode by remember { mutableStateOf(initialLayout) }
 
                     LazyColumn(
                         modifier = Modifier
@@ -131,7 +133,30 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                             )
                         }
 
-                        if (view != LunarWidgetProvider.VIEW_ANNIVERSARY) {
+                        if (view == LunarWidgetProvider.VIEW_SCHEDULE) {
+                            item { HorizontalDivider(Modifier.padding(vertical = 4.dp)) }
+                            item { SectionTitle("日程显示") }
+                            item {
+                                RadioRow(
+                                    selected = layoutMode == LunarWidgetProvider.LAYOUT_SINGLE,
+                                    title = "单条",
+                                    subtitle = "大号倒计时，只显示最近一条日程",
+                                    onClick = { layoutMode = LunarWidgetProvider.LAYOUT_SINGLE }
+                                )
+                            }
+                            item {
+                                RadioRow(
+                                    selected = layoutMode == LunarWidgetProvider.LAYOUT_LIST,
+                                    title = "列表",
+                                    subtitle = "按时间列出接下来的多条日程，点一条可直接打开",
+                                    onClick = { layoutMode = LunarWidgetProvider.LAYOUT_LIST }
+                                )
+                            }
+                        }
+
+                        val singleMode = view != LunarWidgetProvider.VIEW_SCHEDULE ||
+                            layoutMode == LunarWidgetProvider.LAYOUT_SINGLE
+                        if (view != LunarWidgetProvider.VIEW_ANNIVERSARY && singleMode) {
                             item { HorizontalDivider(Modifier.padding(vertical = 4.dp)) }
                             item { SectionTitle("显示方式") }
                             item {
@@ -156,8 +181,10 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                             }
                         }
 
-                        val showList = view == LunarWidgetProvider.VIEW_ANNIVERSARY ||
-                            mode == LunarWidgetProvider.MODE_MANUAL
+                        val showList = singleMode && (
+                            view == LunarWidgetProvider.VIEW_ANNIVERSARY ||
+                                mode == LunarWidgetProvider.MODE_MANUAL
+                            )
                         if (showList) {
                             item { HorizontalDivider(Modifier.padding(vertical = 4.dp)) }
                             item {
@@ -213,7 +240,7 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = {
-                                    saveAndFinish(view, mode, eventId, annivPrimary)
+                                    saveAndFinish(view, mode, eventId, annivPrimary, layoutMode)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -288,10 +315,12 @@ class LunarWidgetConfigActivity : ComponentActivity() {
         view: String,
         mode: String,
         eventId: String?,
-        annivPrimary: String
+        annivPrimary: String,
+        layoutMode: String
     ) {
         LunarWidgetProvider.setViewType(this, widgetId, view)
         LunarWidgetProvider.setAnnivPrimary(this, widgetId, annivPrimary)
+        LunarWidgetProvider.setLayoutMode(this, widgetId, layoutMode)
         if (view == LunarWidgetProvider.VIEW_ANNIVERSARY) {
             // 纪念日以上方列表中选择的一条为准
             val fallback = EventRepository.load(this)

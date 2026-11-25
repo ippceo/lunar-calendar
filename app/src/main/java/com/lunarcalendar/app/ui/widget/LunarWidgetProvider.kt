@@ -11,8 +11,10 @@ import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import com.lunarcalendar.app.CalEvent
+import com.lunarcalendar.app.EXTRA_EVENT_ID
 import com.lunarcalendar.app.EventRepository
 import com.lunarcalendar.app.EventType
+import com.lunarcalendar.app.MainActivity
 import com.lunarcalendar.app.Occurrences
 import com.lunarcalendar.app.R
 import com.lunarcalendar.app.birthdayAge
@@ -56,6 +58,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
                 remove(modeKey(it))
                 remove(eventKey(it))
                 remove(annivKey(it))
+                remove(layoutKey(it))
             }
         }
     }
@@ -77,10 +80,24 @@ class LunarWidgetProvider : AppWidgetProvider() {
         const val ANNIV_PASSED = "passed"
         const val ANNIV_REMAINING = "remaining"
 
+        /** 日程卡布局：单条大号倒计时 / 多条列表。 */
+        const val LAYOUT_SINGLE = "single"
+        const val LAYOUT_LIST = "list"
+
         fun viewKey(widgetId: Int) = "view_$widgetId"
         fun modeKey(widgetId: Int) = "mode_$widgetId"
         fun eventKey(widgetId: Int) = "event_$widgetId"
         fun annivKey(widgetId: Int) = "anniv_$widgetId"
+        fun layoutKey(widgetId: Int) = "layout_$widgetId"
+
+        fun setLayoutMode(context: Context, widgetId: Int, mode: String) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit { putString(layoutKey(widgetId), mode) }
+        }
+
+        fun getLayoutMode(context: Context, widgetId: Int): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(layoutKey(widgetId), LAYOUT_SINGLE) ?: LAYOUT_SINGLE
 
         fun setViewType(context: Context, widgetId: Int, viewType: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -122,6 +139,11 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val viewType = getViewType(context, widgetId)
                 ?: return renderPlaceholder(context, awm, widgetId)
 
+            // 日程卡可切换为「多条列表」布局
+            if (viewType == VIEW_SCHEDULE && getLayoutMode(context, widgetId) == LAYOUT_LIST) {
+                return renderList(context, awm, widgetId)
+            }
+
             val events = EventRepository.load(context).filter { it.enabled }
             val candidates = filterAndSort(events, viewType)
             if (candidates.isEmpty()) {
@@ -153,6 +175,73 @@ class LunarWidgetProvider : AppWidgetProvider() {
                     it.type == EventType.YEARLY_SOLAR || it.type == EventType.YEARLY_LUNAR
                 }.sortedBy { Occurrences.nextTrigger(it)?.toInstant()?.toEpochMilli() ?: Long.MAX_VALUE }
             }
+
+        /** 日程列表模式：按时间列出接下来最多 4 条日程，点一行直接打开对应日程。 */
+        private fun renderList(context: Context, awm: AppWidgetManager, widgetId: Int) {
+            val now = ZonedDateTime.now()
+            val events = EventRepository.load(context).filter { it.enabled }
+            val candidates = filterAndSort(events, VIEW_SCHEDULE)
+            val minHeight = awm.getAppWidgetOptions(widgetId)
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
+            // 头部约 24dp、每行约 30dp，按可用高度自适应条数
+            val capacity = ((minHeight - 24) / 30).coerceIn(1, 4)
+            val visible = candidates.take(capacity)
+
+            val rv = RemoteViews(context.packageName, R.layout.widget_event_list)
+            rv.setOnClickPendingIntent(R.id.ev_header, configIntent(context, widgetId))
+            rv.removeAllViews(R.id.ev_rows)
+            if (visible.isEmpty()) {
+                rv.setViewVisibility(R.id.ev_rows, View.GONE)
+                rv.setViewVisibility(R.id.ev_empty, View.VISIBLE)
+                rv.setOnClickPendingIntent(R.id.ev_empty, openAppIntent(context, widgetId))
+            } else {
+                rv.setViewVisibility(R.id.ev_empty, View.GONE)
+                rv.setViewVisibility(R.id.ev_rows, View.VISIBLE)
+                visible.forEachIndexed { index, event ->
+                    val row = RemoteViews(context.packageName, R.layout.widget_event_row)
+                    row.setTextViewText(R.id.ev_row_title, event.title.ifBlank { "日程" })
+                    row.setTextViewText(R.id.ev_row_sub, Occurrences.nextLabel(event, now))
+                    row.setOnClickPendingIntent(
+                        R.id.ev_row_root,
+                        openEventIntent(context, widgetId, index, event.id)
+                    )
+                    rv.addView(R.id.ev_rows, row)
+                }
+            }
+            awm.updateAppWidget(widgetId, rv)
+        }
+
+        private fun openEventIntent(
+            context: Context,
+            widgetId: Int,
+            index: Int,
+            eventId: String
+        ): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                data = Uri.parse("lunarcalendar://event-widget/$widgetId/$index")
+                putExtra(EXTRA_EVENT_ID, eventId)
+            }
+            return PendingIntent.getActivity(
+                context,
+                widgetId * 100 + index,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun openAppIntent(context: Context, widgetId: Int): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                data = Uri.parse("lunarcalendar://widget-open/$widgetId")
+            }
+            return PendingIntent.getActivity(
+                context,
+                widgetId,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         /** 新加的小组件：只显示一个月牙图形，点击打开配置页。 */
         private fun renderPlaceholder(context: Context, awm: AppWidgetManager, widgetId: Int) {

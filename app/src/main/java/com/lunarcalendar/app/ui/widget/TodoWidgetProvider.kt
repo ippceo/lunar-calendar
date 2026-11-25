@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
+import com.lunarcalendar.app.AppSettings
 import com.lunarcalendar.app.EXTRA_TODO_ID
 import com.lunarcalendar.app.MainActivity
 import com.lunarcalendar.app.R
@@ -108,7 +109,9 @@ class TodoWidgetProvider : AppWidgetProvider() {
             val capacity = ((minHeight - 28) / 38).coerceIn(2, 6)
 
             val todos = TodoRepository.load(context).sortedForDisplay()
-            val pending = todos.filter { !it.done }.take(capacity)
+            val showDone = AppSettings.todoWidgetShowDone(context)
+            val display = if (showDone) todos else todos.filter { !it.done }
+            val visible = display.take(capacity)
             val remaining = todos.count { !it.done }
             val done = todos.count { it.done }
 
@@ -119,7 +122,7 @@ class TodoWidgetProvider : AppWidgetProvider() {
             )
             rv.removeAllViews(R.id.todo_rows)
 
-            if (pending.isEmpty()) {
+            if (visible.isEmpty()) {
                 rv.setViewVisibility(R.id.todo_rows, View.GONE)
                 rv.setViewVisibility(R.id.todo_empty, View.VISIBLE)
                 rv.setTextViewText(
@@ -129,10 +132,16 @@ class TodoWidgetProvider : AppWidgetProvider() {
             } else {
                 rv.setViewVisibility(R.id.todo_empty, View.GONE)
                 rv.setViewVisibility(R.id.todo_rows, View.VISIBLE)
-                pending.forEachIndexed { index, todo ->
+                visible.forEachIndexed { index, todo ->
                     val row = RemoteViews(context.packageName, R.layout.widget_todo_row)
                     row.setTextViewText(R.id.row_title, todo.title.ifBlank { "未命名待办" })
-                    row.setImageViewResource(R.id.row_check, R.drawable.ic_todo_unchecked)
+                    row.setImageViewResource(
+                        R.id.row_check,
+                        if (todo.done) R.drawable.ic_todo_checked else R.drawable.ic_todo_unchecked
+                    )
+                    if (todo.done) {
+                        row.setTextColor(R.id.row_title, 0xFF8A8398.toInt())
+                    }
                     val due = todo.dueAt
                     if (due != null) {
                         row.setViewVisibility(R.id.row_due, View.VISIBLE)

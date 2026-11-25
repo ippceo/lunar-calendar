@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /** 本地通知，不经过 FCM / 任何推送通道。 */
 object Notifications {
@@ -33,7 +34,7 @@ object Notifications {
         }
     }
 
-    fun showReminder(context: Context, event: CalEvent, advanceDays: Int = 0) {
+    fun showReminder(context: Context, event: CalEvent, targetDate: LocalDate = LocalDate.now()) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 context,
@@ -43,9 +44,13 @@ object Notifications {
             return
         }
         ensureChannel(context)
-        val targetDate = LocalDate.now().plusDays(advanceDays.toLong())
+        val daysAhead = ChronoUnit.DAYS.between(LocalDate.now(), targetDate).toInt()
         val lunar = LunarUtils.info(targetDate)
-        val dayText = if (advanceDays > 0) "${advanceDays} 天后" else "今天"
+        val dayText = when {
+            daysAhead > 0 -> "$daysAhead 天后"
+            daysAhead == 0 -> "今天"
+            else -> "已过期"
+        }
         val detail = buildString {
             append("$dayText ${targetDate.monthValue}月${targetDate.dayOfMonth}日 ${event.timeText}")
             append(" · 农历${lunar.monthLabel}${lunar.dayName}")
@@ -76,8 +81,9 @@ object Notifications {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
-            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 10, advanceDays = advanceDays))
-            .addAction(0, "稍后 1 小时", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 60, advanceDays = advanceDays))
+            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 10, targetDate = targetDate))
+            .addAction(0, "稍后 30 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 30, targetDate = targetDate))
+            .addAction(0, "明天 9:00", snoozeIntent(context, eventId = event.id, todoId = null, minutes = minutesUntilNextMorning(), targetDate = targetDate))
             .build()
 
         runCatching {
@@ -128,6 +134,7 @@ object Notifications {
             .setContentIntent(contentIntent)
             .addAction(0, "完成", completeTodoIntent(context, todo.id))
             .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = null, todoId = todo.id, minutes = 10))
+            .addAction(0, "明天 9:00", snoozeIntent(context, eventId = null, todoId = todo.id, minutes = minutesUntilNextMorning()))
             .build()
 
         runCatching {
@@ -151,14 +158,15 @@ object Notifications {
         eventId: String?,
         todoId: String?,
         minutes: Int,
-        advanceDays: Int = 0
+        advanceDays: Int = 0,
+        targetDate: LocalDate? = null
     ): PendingIntent {
         val target = eventId ?: todoId.orEmpty()
         val intent = Intent(context, SnoozeReceiver::class.java).apply {
             action = SnoozeReceiver.ACTION_SNOOZE
             // data 让不同事件/待办、不同时长的 PendingIntent 互不覆盖
             data = Uri.parse("lunarcalendar://snooze/${Uri.encode(target)}/$minutes")
-            putPayload(snoozePayload(eventId, todoId, minutes, advanceDays))
+            putPayload(snoozePayload(eventId, todoId, minutes, advanceDays, targetDate))
         }
         return PendingIntent.getBroadcast(
             context,
@@ -201,12 +209,25 @@ internal fun snoozePayload(
     eventId: String?,
     todoId: String?,
     minutes: Int,
-    advanceDays: Int
+    advanceDays: Int,
+    targetDate: LocalDate? = null
 ): Map<String, Any> = buildMap {
     if (eventId != null) put(EXTRA_EVENT_ID, eventId)
     if (todoId != null) put(EXTRA_TODO_ID, todoId)
     put(SnoozeReceiver.EXTRA_SNOOZE_MINUTES, minutes)
     if (advanceDays > 0) put(EXTRA_ADVANCE_DAYS, advanceDays)
+    if (targetDate != null) put(EXTRA_TARGET_DATE, targetDate.toString())
+}
+
+/**
+ * 「明天 9:00」档位：从现在到次日 09:00 的分钟数。
+ * 用绝对目标时刻换算，跨天时不会因为单纯加 24 小时而漂移。
+ */
+internal fun minutesUntilNextMorning(
+    now: java.time.ZonedDateTime = java.time.ZonedDateTime.now()
+): Int {
+    val target = now.toLocalDate().plusDays(1).atTime(9, 0).atZone(now.zone)
+    return java.time.Duration.between(now, target).toMinutes().toInt().coerceAtLeast(1)
 }
 
 /** 「完成」广播的 extra 载荷，key 必须与 [TodoToggleReceiver] 读取的一致。 */

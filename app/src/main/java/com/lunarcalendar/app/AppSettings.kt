@@ -12,6 +12,19 @@ object AppSettings {
     private const val KEY_EXCLUDE_FROM_RECENTS = "exclude_from_recents"
     private const val KEY_WEEK_START = "week_start"
     private const val KEY_ACCENT = "accent"
+    private const val KEY_TODO_WIDGET_SHOW_DONE = "todo_widget_show_done"
+
+    /** 待办小组件是否同时显示已完成条目（默认只显示未完成）。 */
+    fun todoWidgetShowDone(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_TODO_WIDGET_SHOW_DONE, false)
+
+    fun setTodoWidgetShowDone(context: Context, value: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_TODO_WIDGET_SHOW_DONE, value)
+            .apply()
+    }
 
     /** 一周起始日：0 = 周一，1 = 周日。 */
     fun weekStart(context: Context): Int =

@@ -6,12 +6,19 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import java.time.LocalDate
 import java.time.ZonedDateTime
 
 const val EXTRA_EVENT_ID = "event_id"
 
 /** 提前提醒的天数；主提醒不带此参数（默认 0 = 当天）。 */
 const val EXTRA_ADVANCE_DAYS = "advance_days"
+
+/**
+ * 提醒对应的目标日期（ISO-8601）。
+ * 「稍后提醒」跨天时仍按原日程日期展示，避免日期跟着推迟。
+ */
+const val EXTRA_TARGET_DATE = "target_date"
 
 /** 主提醒的槽位编号，提前提醒用 1~7 表示提前天数。 */
 private const val SLOT_MAIN = 0
@@ -35,7 +42,11 @@ object ReminderScheduler {
         for (slot in SLOT_MAIN..MAX_ADVANCE_DAYS) {
             alarmManager.cancel(pendingIntent(context, event.id, slot))
         }
-        if (!event.enabled) return
+        if (!event.enabled) {
+            // 关闭提醒时一并撤销尚未触发的「稍后提醒」，避免已停用的日程再次弹通知
+            alarmManager.cancel(snoozePendingIntent(context, event.id, 0))
+            return
+        }
 
         val trigger = Occurrences.nextTrigger(event, from) ?: return
         if (trigger.isAfter(ZonedDateTime.now())) {
@@ -58,6 +69,8 @@ object ReminderScheduler {
         for (slot in SLOT_MAIN..MAX_ADVANCE_DAYS) {
             alarmManager.cancel(pendingIntent(context, eventId, slot))
         }
+        // 「稍后提醒」用的是独立 PendingIntent，删除事件时也要一并撤销
+        alarmManager.cancel(snoozePendingIntent(context, eventId, 0))
     }
 
     /**
@@ -65,23 +78,36 @@ object ReminderScheduler {
      * 也不影响正常排期的下一次提醒。走主提醒通道（[ReminderReceiver]），
      * 到点后同样会自动续排下一次。
      */
-    fun snooze(context: Context, event: CalEvent, minutes: Int, advanceDays: Int = 0) {
+    fun snooze(
+        context: Context,
+        event: CalEvent,
+        minutes: Int,
+        advanceDays: Int = 0,
+        targetDate: LocalDate? = null
+    ) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val at = java.time.ZonedDateTime.now().plusMinutes(minutes.toLong().coerceAtLeast(1))
         setAlarm(
             alarmManager,
             at.toInstant().toEpochMilli(),
-            snoozePendingIntent(context, event.id, advanceDays)
+            snoozePendingIntent(context, event.id, advanceDays, targetDate)
         )
     }
 
-    private fun snoozePendingIntent(context: Context, eventId: String, advanceDays: Int): PendingIntent {
+    private fun snoozePendingIntent(
+        context: Context,
+        eventId: String,
+        advanceDays: Int,
+        targetDate: LocalDate? = null
+    ): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             // data 与正常槽位不同，取消/重建时互不影响
             data = Uri.parse("lunarcalendar://event/$eventId/snooze")
             putExtra(EXTRA_EVENT_ID, eventId)
             // 保留「提前 N 天」语义，稍后重发时文案仍是「N 天后 · 某月某日」
             if (advanceDays > 0) putExtra(EXTRA_ADVANCE_DAYS, advanceDays)
+            // 目标日期固定为首次提醒时算出的那一天，跨天「稍后」也不会漂移
+            targetDate?.let { putExtra(EXTRA_TARGET_DATE, it.toString()) }
         }
         return PendingIntent.getBroadcast(
             context,

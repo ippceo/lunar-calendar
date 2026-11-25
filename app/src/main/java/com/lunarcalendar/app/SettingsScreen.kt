@@ -71,6 +71,7 @@ fun SettingsScreen(
         item { ReliabilityCard(permissionTick) }
         item { DataBackupCard(events, todos, onSaveAll) }
         item { AutoBackupCard(events, todos, onSaveAll) }
+        item { WidgetSettingsCard() }
     }
 }
 
@@ -228,6 +229,7 @@ private fun DataBackupCard(
     onSaveAll: (List<CalEvent>, List<TodoItem>) -> Unit
 ) {
     val context = LocalContext.current
+    var pendingImport by remember { mutableStateOf<BackupData?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -251,13 +253,24 @@ private fun DataBackupCard(
             Toast.makeText(context, "导入失败：不是有效的备份文件", Toast.LENGTH_LONG).show()
             return@rememberLauncherForActivityResult
         }
+        // 先预览条数，由用户决定覆盖 / 合并 / 跳过
+        pendingImport = imported
+    }
+
+    fun applyImport(data: BackupData, strategy: DataBackup.ImportStrategy) {
         onSaveAll(
-            DataBackup.merge(events, imported.events),
-            DataBackup.mergeTodos(todos, imported.todos)
+            DataBackup.applyImport(events, data.events, strategy),
+            DataBackup.applyImportTodos(todos, data.todos, strategy)
         )
+        pendingImport = null
         Toast.makeText(
             context,
-            "已导入 ${imported.events.size} 条提醒、${imported.todos.size} 条待办",
+            when (strategy) {
+                DataBackup.ImportStrategy.OVERWRITE ->
+                    "已覆盖导入 ${data.events.size} 条提醒、${data.todos.size} 条待办"
+                DataBackup.ImportStrategy.MERGE ->
+                    "已合并导入 ${data.events.size} 条提醒、${data.todos.size} 条待办"
+            },
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -271,7 +284,7 @@ private fun DataBackupCard(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "把所有日程、生日、纪念日和待办导出成一个文件，换手机后在新设备上导入即可恢复。导入按 id 合并，同一条不会重复。",
+                text = "把所有日程、生日、纪念日和待办导出成一个文件，换手机后在新设备上导入即可恢复。导入前会先显示条数，可选择覆盖、合并或跳过。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -296,6 +309,44 @@ private fun DataBackupCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+
+    pendingImport?.let { data ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("导入预览") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "文件内有 ${data.events.size} 条提醒、${data.todos.size} 条待办。",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "当前已有 ${events.size} 条提醒、${todos.size} 条待办。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "覆盖：清空现有数据后写入文件内容。\n" +
+                            "合并：相同条目（同 id）以文件为准，其余保留。\n" +
+                            "跳过：不做任何修改。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { pendingImport = null }) { Text("跳过") }
+                    OutlinedButton(
+                        onClick = { applyImport(data, DataBackup.ImportStrategy.MERGE) }
+                    ) { Text("合并") }
+                    Button(
+                        onClick = { applyImport(data, DataBackup.ImportStrategy.OVERWRITE) }
+                    ) { Text("覆盖") }
+                }
+            }
+        )
     }
 }
 
@@ -397,6 +448,52 @@ private fun AutoBackupCard(
 
 private fun formatBackupTime(time: java.time.LocalDateTime): String =
     "${time.monthValue}月${time.dayOfMonth}日 %02d:%02d".format(time.hour, time.minute)
+
+@Composable
+private fun WidgetSettingsCard() {
+    val context = LocalContext.current
+    var showDone by remember { mutableStateOf(AppSettings.todoWidgetShowDone(context)) }
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = "桌面小组件",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "待办小组件默认只显示未完成事项，勾选后会从列表中消失。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("显示已完成待办", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "已完成的条目排在未完成之后，点一下可重新打开",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = showDone,
+                    onCheckedChange = { value ->
+                        showDone = value
+                        AppSettings.setTodoWidgetShowDone(context, value)
+                        com.lunarcalendar.app.ui.widget.TodoWidgetProvider.forceRefreshAll(context)
+                    }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun PermissionRow(title: String, granted: Boolean, onClick: () -> Unit) {
