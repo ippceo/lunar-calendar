@@ -87,8 +87,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readDeepLink(intent: Intent): DeepLink? {
-        val eventId = intent.getStringExtra(Notifications.EXTRA_EVENT_ID)
-        val todoId = intent.getStringExtra(Notifications.EXTRA_TODO_ID)
+        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+        val todoId = intent.getStringExtra(EXTRA_TODO_ID)
         return when {
             eventId != null -> DeepLink(eventId = eventId)
             todoId != null -> DeepLink(todoId = todoId)

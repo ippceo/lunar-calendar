@@ -17,8 +17,6 @@ import java.time.LocalDate
 /** 本地通知，不经过 FCM / 任何推送通道。 */
 object Notifications {
     private const val CHANNEL_ID = "calendar_reminders"
-    const val EXTRA_EVENT_ID = "com.lunarcalendar.app.extra.EVENT_ID"
-    const val EXTRA_TODO_ID = "com.lunarcalendar.app.extra.TODO_ID"
 
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -139,15 +137,18 @@ object Notifications {
 
     /** 「稍后」操作：发到非导出的 [SnoozeReceiver]，设临时闹钟并收起当前通知。 */
     private fun snoozeIntent(context: Context, eventId: String?, todoId: String?, minutes: Int): PendingIntent {
+        val target = eventId ?: todoId.orEmpty()
         val intent = Intent(context, SnoozeReceiver::class.java).apply {
             action = SnoozeReceiver.ACTION_SNOOZE
+            // data 让不同事件/待办、不同时长的 PendingIntent 互不覆盖
+            data = Uri.parse("lunarcalendar://snooze/$target/$minutes")
             if (eventId != null) putExtra(EXTRA_EVENT_ID, eventId)
             if (todoId != null) putExtra(EXTRA_TODO_ID, todoId)
             putExtra(SnoozeReceiver.EXTRA_SNOOZE_MINUTES, minutes)
         }
         return PendingIntent.getBroadcast(
             context,
-            "snooze:${eventId ?: todoId}:$minutes".hashCode(),
+            "snooze:$target:$minutes".hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -157,6 +158,7 @@ object Notifications {
     private fun completeTodoIntent(context: Context, todoId: String): PendingIntent {
         val intent = Intent(context, com.lunarcalendar.app.ui.widget.TodoToggleReceiver::class.java).apply {
             action = com.lunarcalendar.app.ui.widget.TodoWidgetProvider.ACTION_TOGGLE
+            data = Uri.parse("lunarcalendar://complete/$todoId")
             putExtra(EXTRA_TODO_ID, todoId)
         }
         return PendingIntent.getBroadcast(

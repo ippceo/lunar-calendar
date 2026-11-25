@@ -61,6 +61,14 @@ private fun typeName(type: EventType): String = when (type) {
     EventType.ANNIVERSARY -> "纪念日"
 }
 
+/** 名称输入框的提示语：随类型变化，避免新建时四种类型提示一样。 */
+private fun titleHint(type: EventType): String = when (type) {
+    EventType.ONCE -> "名称，例如 项目会议"
+    EventType.YEARLY_SOLAR -> "名称，例如 妈妈生日"
+    EventType.YEARLY_LUNAR -> "名称，例如 爷爷生日"
+    EventType.ANNIVERSARY -> "名称，例如 结婚纪念日"
+}
+
 /** 一次性日程可选的自定义重复规则。 */
 private val REPEAT_OPTIONS: List<RepeatRule?> = listOf(
     null,
@@ -157,7 +165,7 @@ fun EventEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it.take(MAX_TEXT_LENGTH) },
-                    label = { Text("名称，例如 妈妈生日") },
+                    label = { Text(titleHint(type)) },
                     supportingText = { Text("${title.length}/$MAX_TEXT_LENGTH") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
