@@ -12,8 +12,8 @@ android {
         applicationId = "com.lunarcalendar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "2.4.1"
+        versionCode = 22
+        versionName = "2.4.2"
     }
 
     signingConfigs {

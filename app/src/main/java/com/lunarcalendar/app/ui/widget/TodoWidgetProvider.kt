@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
+import com.lunarcalendar.app.EXTRA_TODO_ID
 import com.lunarcalendar.app.MainActivity
 import com.lunarcalendar.app.R
 import com.lunarcalendar.app.TodoRepository
@@ -42,7 +43,7 @@ class TodoWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TOGGLE -> {
-                toggleTodo(context, intent.getStringExtra(EXTRA_TODO_ID))
+                handleToggle(context, intent.getStringExtra(EXTRA_TODO_ID))
                 return
             }
 
@@ -62,8 +63,10 @@ class TodoWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_TOGGLE = "com.lunarcalendar.app.action.TODO_TOGGLE"
+
+        /** 通知栏「完成」：置为已完成，不再走 toggle，避免误把已完成的任务重新打开。 */
+        const val ACTION_COMPLETE = "com.lunarcalendar.app.action.TODO_COMPLETE"
         const val ACTION_REFRESH = "com.lunarcalendar.app.action.TODO_REFRESH"
-        private const val EXTRA_TODO_ID = "todo_id"
 
         fun forceRefreshAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -73,16 +76,21 @@ class TodoWidgetProvider : AppWidgetProvider() {
             ids.forEach { updateWidget(context, manager, it) }
         }
 
-        /** 供 [TodoToggleReceiver] 调用的公开入口。 */
+        /** 供 [TodoToggleReceiver] 调用的公开入口：桌面组件行点击 = 切换完成状态。 */
         fun handleToggle(context: Context, todoId: String?) {
-            toggleTodo(context, todoId)
+            updateDone(context, todoId, forcedDone = null)
         }
 
-        private fun toggleTodo(context: Context, todoId: String?) {
+        /** 供 [TodoToggleReceiver] 调用的公开入口：通知栏「完成」= 只置为完成。 */
+        fun handleComplete(context: Context, todoId: String?) {
+            updateDone(context, todoId, forcedDone = true)
+        }
+
+        private fun updateDone(context: Context, todoId: String?, forcedDone: Boolean?) {
             if (todoId == null) return
             val todos = TodoRepository.load(context)
             val updated = todos.map {
-                if (it.id == todoId) it.copy(done = !it.done) else it
+                if (it.id == todoId) it.copy(done = forcedDone ?: !it.done) else it
             }
             TodoRepository.save(context, updated)
             TodoScheduler.rescheduleAll(context, updated)
@@ -192,16 +200,25 @@ class TodoWidgetProvider : AppWidgetProvider() {
  */
 class TodoToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == TodoWidgetProvider.ACTION_TOGGLE) {
-            val todoId = intent.getStringExtra("todo_id")
-            TodoWidgetProvider.handleToggle(context, todoId)
-            // 从通知栏「完成」进入时，同步收起对应通知
-            if (todoId != null) {
-                runCatching {
-                    androidx.core.app.NotificationManagerCompat.from(context)
-                        .cancel("todo:$todoId", 0)
-                }
+        when (intent.action) {
+            TodoWidgetProvider.ACTION_TOGGLE -> {
+                val todoId = intent.getStringExtra(EXTRA_TODO_ID)
+                TodoWidgetProvider.handleToggle(context, todoId)
+                cancelNotification(context, todoId)
             }
+
+            TodoWidgetProvider.ACTION_COMPLETE -> {
+                val todoId = intent.getStringExtra(EXTRA_TODO_ID)
+                TodoWidgetProvider.handleComplete(context, todoId)
+                cancelNotification(context, todoId)
+            }
+        }
+    }
+
+    private fun cancelNotification(context: Context, todoId: String?) {
+        if (todoId == null) return
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(context).cancel("todo:$todoId", 0)
         }
     }
 }

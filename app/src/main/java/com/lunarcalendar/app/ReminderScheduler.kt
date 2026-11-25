@@ -65,17 +65,23 @@ object ReminderScheduler {
      * 也不影响正常排期的下一次提醒。走主提醒通道（[ReminderReceiver]），
      * 到点后同样会自动续排下一次。
      */
-    fun snooze(context: Context, event: CalEvent, minutes: Int) {
+    fun snooze(context: Context, event: CalEvent, minutes: Int, advanceDays: Int = 0) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val at = java.time.ZonedDateTime.now().plusMinutes(minutes.toLong().coerceAtLeast(1))
-        setAlarm(alarmManager, at.toInstant().toEpochMilli(), snoozePendingIntent(context, event.id))
+        setAlarm(
+            alarmManager,
+            at.toInstant().toEpochMilli(),
+            snoozePendingIntent(context, event.id, advanceDays)
+        )
     }
 
-    private fun snoozePendingIntent(context: Context, eventId: String): PendingIntent {
+    private fun snoozePendingIntent(context: Context, eventId: String, advanceDays: Int): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             // data 与正常槽位不同，取消/重建时互不影响
             data = Uri.parse("lunarcalendar://event/$eventId/snooze")
             putExtra(EXTRA_EVENT_ID, eventId)
+            // 保留「提前 N 天」语义，稍后重发时文案仍是「N 天后 · 某月某日」
+            if (advanceDays > 0) putExtra(EXTRA_ADVANCE_DAYS, advanceDays)
         }
         return PendingIntent.getBroadcast(
             context,

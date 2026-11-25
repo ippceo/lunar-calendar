@@ -483,4 +483,30 @@ class LunarLogicTest {
         val around = LunarUtils.nextSolarTerm(LocalDate.of(2026, 12, 22))
         assertTrue(around != null && around!!.second in 0..90)
     }
+
+    /**
+     * 通知 action 的 extra key 必须与接收器读取的一致。
+     * 同类问题（对象成员遮蔽同包顶层常量）曾让「稍后提醒」「完成」点了没反应。
+     */
+    @Test
+    fun snoozePayloadUsesReceiverKeys() {
+        val eventPayload = snoozePayload(eventId = "e1", todoId = null, minutes = 10, advanceDays = 3)
+        assertEquals("e1", eventPayload[EXTRA_EVENT_ID])
+        assertEquals(10, eventPayload[SnoozeReceiver.EXTRA_SNOOZE_MINUTES])
+        assertEquals(3, eventPayload[EXTRA_ADVANCE_DAYS])
+        assertFalse(eventPayload.containsKey(EXTRA_TODO_ID))
+
+        val todoPayload = snoozePayload(eventId = null, todoId = "t1", minutes = 60, advanceDays = 0)
+        assertEquals("t1", todoPayload[EXTRA_TODO_ID])
+        assertEquals(60, todoPayload[SnoozeReceiver.EXTRA_SNOOZE_MINUTES])
+        assertFalse(todoPayload.containsKey(EXTRA_EVENT_ID))
+        assertFalse(todoPayload.containsKey(EXTRA_ADVANCE_DAYS))
+    }
+
+    @Test
+    fun completePayloadUsesTodoKey() {
+        val payload = completePayload("t1")
+        assertEquals("t1", payload[EXTRA_TODO_ID])
+        assertEquals(1, payload.size)
+    }
 }

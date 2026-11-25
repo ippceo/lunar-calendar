@@ -76,8 +76,8 @@ object Notifications {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
-            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 10))
-            .addAction(0, "稍后 1 小时", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 60))
+            .addAction(0, "稍后 10 分钟", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 10, advanceDays = advanceDays))
+            .addAction(0, "稍后 1 小时", snoozeIntent(context, eventId = event.id, todoId = null, minutes = 60, advanceDays = advanceDays))
             .build()
 
         runCatching {
@@ -135,16 +135,30 @@ object Notifications {
         }
     }
 
+    /** 收起某条日程提醒（删除/编辑事件后避免留下僵尸通知）。 */
+    fun cancelEvent(context: Context, eventId: String) {
+        runCatching { NotificationManagerCompat.from(context).cancel(eventId, 0) }
+    }
+
+    /** 收起某条待办提醒（App 内完成或删除待办后）。 */
+    fun cancelTodo(context: Context, todoId: String) {
+        runCatching { NotificationManagerCompat.from(context).cancel("todo:$todoId", 0) }
+    }
+
     /** 「稍后」操作：发到非导出的 [SnoozeReceiver]，设临时闹钟并收起当前通知。 */
-    private fun snoozeIntent(context: Context, eventId: String?, todoId: String?, minutes: Int): PendingIntent {
+    private fun snoozeIntent(
+        context: Context,
+        eventId: String?,
+        todoId: String?,
+        minutes: Int,
+        advanceDays: Int = 0
+    ): PendingIntent {
         val target = eventId ?: todoId.orEmpty()
         val intent = Intent(context, SnoozeReceiver::class.java).apply {
             action = SnoozeReceiver.ACTION_SNOOZE
             // data 让不同事件/待办、不同时长的 PendingIntent 互不覆盖
-            data = Uri.parse("lunarcalendar://snooze/$target/$minutes")
-            if (eventId != null) putExtra(EXTRA_EVENT_ID, eventId)
-            if (todoId != null) putExtra(EXTRA_TODO_ID, todoId)
-            putExtra(SnoozeReceiver.EXTRA_SNOOZE_MINUTES, minutes)
+            data = Uri.parse("lunarcalendar://snooze/${Uri.encode(target)}/$minutes")
+            putPayload(snoozePayload(eventId, todoId, minutes, advanceDays))
         }
         return PendingIntent.getBroadcast(
             context,
@@ -154,12 +168,12 @@ object Notifications {
         )
     }
 
-    /** 「完成」操作：复用非导出的待办勾选接收器，通知栏直接完成待办。 */
+    /** 「完成」操作：发到非导出的待办勾选接收器，语义是「置为完成」而不是 toggle。 */
     private fun completeTodoIntent(context: Context, todoId: String): PendingIntent {
         val intent = Intent(context, com.lunarcalendar.app.ui.widget.TodoToggleReceiver::class.java).apply {
-            action = com.lunarcalendar.app.ui.widget.TodoWidgetProvider.ACTION_TOGGLE
-            data = Uri.parse("lunarcalendar://complete/$todoId")
-            putExtra(EXTRA_TODO_ID, todoId)
+            action = com.lunarcalendar.app.ui.widget.TodoWidgetProvider.ACTION_COMPLETE
+            data = Uri.parse("lunarcalendar://complete/${Uri.encode(todoId)}")
+            putPayload(completePayload(todoId))
         }
         return PendingIntent.getBroadcast(
             context,
@@ -168,4 +182,33 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+
+    private fun Intent.putPayload(payload: Map<String, Any>) {
+        payload.forEach { (key, value) ->
+            when (value) {
+                is Int -> putExtra(key, value)
+                else -> putExtra(key, value.toString())
+            }
+        }
+    }
 }
+
+/**
+ * 「稍后」广播的 extra 载荷。抽成纯函数（不依赖 Android 运行时），
+ * 便于单测锁定 key 与 [SnoozeReceiver] 读取的一致——同权重名常量遮蔽曾导致按钮无响应。
+ */
+internal fun snoozePayload(
+    eventId: String?,
+    todoId: String?,
+    minutes: Int,
+    advanceDays: Int
+): Map<String, Any> = buildMap {
+    if (eventId != null) put(EXTRA_EVENT_ID, eventId)
+    if (todoId != null) put(EXTRA_TODO_ID, todoId)
+    put(SnoozeReceiver.EXTRA_SNOOZE_MINUTES, minutes)
+    if (advanceDays > 0) put(EXTRA_ADVANCE_DAYS, advanceDays)
+}
+
+/** 「完成」广播的 extra 载荷，key 必须与 [TodoToggleReceiver] 读取的一致。 */
+internal fun completePayload(todoId: String): Map<String, Any> =
+    mapOf(EXTRA_TODO_ID to todoId)

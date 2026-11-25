@@ -3,7 +3,6 @@ package com.lunarcalendar.app
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationManagerCompat
 
 /** 闹钟到点：发本地通知，并让重复日程续排下一次。 */
 class ReminderReceiver : BroadcastReceiver() {
@@ -42,21 +41,22 @@ class TodoReminderReceiver : BroadcastReceiver() {
 class SnoozeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val minutes = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 10)
+        val advanceDays = intent.getIntExtra(EXTRA_ADVANCE_DAYS, 0)
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val todoId = intent.getStringExtra(EXTRA_TODO_ID)
         when {
             eventId != null -> {
                 EventRepository.load(context).firstOrNull { it.id == eventId }?.let { event ->
-                    if (event.enabled) ReminderScheduler.snooze(context, event, minutes)
+                    if (event.enabled) ReminderScheduler.snooze(context, event, minutes, advanceDays)
                 }
-                runCatching { NotificationManagerCompat.from(context).cancel(eventId, 0) }
+                Notifications.cancelEvent(context, eventId)
             }
 
             todoId != null -> {
                 TodoRepository.load(context).firstOrNull { it.id == todoId }?.let { todo ->
                     if (!todo.done) TodoScheduler.snooze(context, todo, minutes)
                 }
-                runCatching { NotificationManagerCompat.from(context).cancel("todo:$todoId", 0) }
+                Notifications.cancelTodo(context, todoId)
             }
         }
     }

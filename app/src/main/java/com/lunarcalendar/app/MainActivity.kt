@@ -272,6 +272,12 @@ private fun CalendarApp(
     }
 
     fun persist(updated: List<CalEvent>) {
+        // 删除或编辑过的日程：收起已经投递的提醒，避免留下点进去找不到的僵尸通知
+        events.forEach { previous ->
+            if (updated.firstOrNull { it.id == previous.id } != previous) {
+                Notifications.cancelEvent(context, previous.id)
+            }
+        }
         events = updated
         EventRepository.save(context, updated)
         ReminderScheduler.rescheduleAll(context, updated)
@@ -280,6 +286,11 @@ private fun CalendarApp(
     }
 
     fun persistTodos(updated: List<TodoItem>) {
+        todos.forEach { previous ->
+            if (updated.firstOrNull { it.id == previous.id } != previous) {
+                Notifications.cancelTodo(context, previous.id)
+            }
+        }
         todos = updated
         TodoRepository.save(context, updated)
         TodoScheduler.rescheduleAll(context, updated)
