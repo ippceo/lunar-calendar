@@ -4,6 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
+    android:minHeight="32dp"
     android:paddingTop="3dp"
     android:paddingBottom="3dp">
 
@@ -20,8 +21,9 @@
         android:id="@+id/ev_row_sub"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
         android:textSize="10sp"
-        android:textColor="#8A8398"
+        android:textColor="#6B6478"
         android:singleLine="true"
         android:ellipsize="end" />
 </LinearLayout>

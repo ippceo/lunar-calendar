@@ -3,8 +3,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@drawable/widget_bg"
-    android:padding="12dp">
+    android:background="@drawable/widget_bg_todo"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:id="@+id/todo_header"
@@ -27,8 +30,13 @@
             android:id="@+id/todo_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#8A8398"
+            android:background="@drawable/widget_pill"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textSize="10sp"
+            android:textColor="#6D4AAE"
             android:singleLine="true" />
     </LinearLayout>
 
@@ -38,8 +46,9 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="center"
-        android:text="暂无待办\n点此添加"
-        android:textSize="13sp"
+        android:lineSpacingExtra="4dp"
+        android:text="还没有待办\n点一下，添加一条"
+        android:textSize="12sp"
         android:textColor="#8A8398"
         android:visibility="gone" />
 
@@ -49,4 +58,16 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/todo_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:paddingTop="4dp"
+        android:text="查看全部 ›"
+        android:textSize="11sp"
+        android:textColor="#6D4AAE"
+        android:singleLine="true"
+        android:visibility="gone" />
 </LinearLayout>

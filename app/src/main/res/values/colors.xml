@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#B3261E</color>
+
+    <!-- 桌面小组件：文字与类型强调色 -->
+    <color name="widget_ink">#FF2C2738</color>
+    <color name="widget_muted">#FF6B6478</color>
+    <color name="widget_faint">#FF9A93A8</color>
+    <color name="widget_schedule_accent">#FF4F46E5</color>
+    <color name="widget_birthday_accent">#FFC2416B</color>
+    <color name="widget_anniversary_accent">#FFB4690E</color>
+    <color name="widget_todo_accent">#FF6D4AAE</color>
+    <color name="widget_overdue">#FFC2416B</color>
 </resources>

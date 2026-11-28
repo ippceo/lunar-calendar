@@ -89,17 +89,29 @@ class MainActivity : ComponentActivity() {
     private fun readDeepLink(intent: Intent): DeepLink? {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val todoId = intent.getStringExtra(EXTRA_TODO_ID)
+        val tab = intent.getIntExtra(EXTRA_WIDGET_TAB, -1)
+        val subTab = intent.getIntExtra(EXTRA_WIDGET_SUBTAB, -1)
         return when {
             eventId != null -> DeepLink(eventId = eventId)
             todoId != null -> DeepLink(todoId = todoId)
+            tab >= 0 -> DeepLink(
+                openTab = tab,
+                openSubTab = subTab.takeIf { it >= 0 }
+            )
             else -> null
         }
     }
 }
 
+/** 小组件快捷入口：直接落到指定底部 Tab（可选提醒子页）。 */
+const val EXTRA_WIDGET_TAB = "widget_tab"
+const val EXTRA_WIDGET_SUBTAB = "widget_subtab"
+
 private data class DeepLink(
     val eventId: String? = null,
-    val todoId: String? = null
+    val todoId: String? = null,
+    val openTab: Int? = null,
+    val openSubTab: Int? = null
 )
 
 /** 主题色预设：名称 + 主色，供设置页展示。 */
@@ -230,6 +242,12 @@ private fun CalendarApp(
             reminderSubTab = 3
             todos.firstOrNull { it.id == link.todoId }?.let { todo ->
                 todoEditorTarget = TodoEditorTarget(todo, isNew = false)
+            }
+        } else {
+            val targetTab = link.openTab
+            if (targetTab != null) {
+                tab = targetTab
+                link.openSubTab?.let { reminderSubTab = it }
             }
         }
         onDeepLinkHandled()
