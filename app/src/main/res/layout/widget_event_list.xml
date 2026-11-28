@@ -4,7 +4,10 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_bg"
-    android:padding="12dp">
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:id="@+id/ev_header"
@@ -21,14 +24,19 @@
             android:text="日程"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="#5B4B8A" />
+            android:textColor="#4A3F73" />
 
         <TextView
+            android:id="@+id/ev_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="最近"
-            android:textSize="11sp"
-            android:textColor="#8A8398"
+            android:background="@drawable/widget_chip_neutral"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textSize="10sp"
+            android:textColor="#7A6AAE"
             android:singleLine="true" />
     </LinearLayout>
 
@@ -38,7 +46,8 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="center"
-        android:text="暂无日程\n点此添加"
+        android:text="近期没有日程\n点一下添加"
+        android:lineSpacingExtra="2dp"
         android:textSize="13sp"
         android:textColor="#8A8398"
         android:visibility="gone" />

@@ -56,6 +56,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.LocalDate
 import java.time.YearMonth
 
+/** 待办小组件点击标题：直接打开「提醒 → 待办」页，而不是停在日历页。 */
+const val EXTRA_OPEN_TODO_TAB = "open_todo_tab"
+
 class MainActivity : ComponentActivity() {
     private val deepLink = mutableStateOf<DeepLink?>(null)
 
@@ -92,6 +95,7 @@ class MainActivity : ComponentActivity() {
         return when {
             eventId != null -> DeepLink(eventId = eventId)
             todoId != null -> DeepLink(todoId = todoId)
+            intent.getBooleanExtra(EXTRA_OPEN_TODO_TAB, false) -> DeepLink(openTodoTab = true)
             else -> null
         }
     }
@@ -99,7 +103,8 @@ class MainActivity : ComponentActivity() {
 
 private data class DeepLink(
     val eventId: String? = null,
-    val todoId: String? = null
+    val todoId: String? = null,
+    val openTodoTab: Boolean = false
 )
 
 /** 主题色预设：名称 + 主色，供设置页展示。 */
@@ -231,6 +236,9 @@ private fun CalendarApp(
             todos.firstOrNull { it.id == link.todoId }?.let { todo ->
                 todoEditorTarget = TodoEditorTarget(todo, isNew = false)
             }
+        } else if (link.openTodoTab) {
+            tab = 1
+            reminderSubTab = 3
         }
         onDeepLinkHandled()
     }

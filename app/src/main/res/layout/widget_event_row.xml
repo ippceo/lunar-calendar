@@ -3,14 +3,16 @@
     android:id="@+id/ev_row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingTop="3dp"
-    android:paddingBottom="3dp">
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
 
     <TextView
         android:id="@+id/ev_row_title"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_weight="1"
         android:textSize="13sp"
         android:textColor="#2C2738"
         android:singleLine="true"
@@ -18,8 +20,10 @@
 
     <TextView
         android:id="@+id/ev_row_sub"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:maxWidth="64dp"
         android:textSize="10sp"
         android:textColor="#8A8398"
         android:singleLine="true"
