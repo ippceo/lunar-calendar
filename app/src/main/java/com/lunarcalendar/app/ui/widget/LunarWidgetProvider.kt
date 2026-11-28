@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.lunarcalendar.app.CalEvent
@@ -289,7 +290,6 @@ class LunarWidgetProvider : AppWidgetProvider() {
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.VISIBLE)
             rv.setViewVisibility(R.id.w_badge, View.GONE)
-            rv.setViewVisibility(R.id.w_separator, View.GONE)
             rv.setViewVisibility(R.id.w_kicker, View.GONE)
             rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(R.id.w_header, "拾光")
@@ -349,7 +349,6 @@ class LunarWidgetProvider : AppWidgetProvider() {
             val rv = RemoteViews(context.packageName, R.layout.widget_main)
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
-            rv.setViewVisibility(R.id.w_separator, View.VISIBLE)
             rv.setViewVisibility(R.id.w_kicker, View.GONE)
             applyBadge(rv, event.type)
             val now = ZonedDateTime.now()
@@ -379,7 +378,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
                         custom.ifBlank {
                             when {
                                 todayIsAnniversary -> "今天就是纪念日"
-                                primaryPassed -> "距下次还有 $remaining 天"
+                                primaryPassed -> "离纪念日还有 $remaining 天"
                                 else -> "已经走过 $passed 天"
                             }
                         }
@@ -427,7 +426,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
                     val multi = group.size > 1
                     rv.setTextViewText(
                         R.id.w_header,
-                        if (multi) "${group.size} 人同日" else event.title.ifBlank { "生日" }
+                        if (multi) "哟，在同一天" else event.title.ifBlank { "生日" }
                     )
                     when {
                         days == null -> {
@@ -451,8 +450,11 @@ class LunarWidgetProvider : AppWidgetProvider() {
                         }
                     }
                     if (multi) {
+                        // 同日 2~3 人时要多占两行，数字与说明各缩小一档，避免 2×2 被裁切
+                        rv.setTextViewTextSize(R.id.w_number, TypedValue.COMPLEX_UNIT_SP, 40f)
+                        rv.setTextViewTextSize(R.id.w_secondary, TypedValue.COMPLEX_UNIT_SP, 11f)
                         val shown = group.take(3)
-                        val text = shown.joinToString(" / ") { item ->
+                        val text = shown.joinToString("\n") { item ->
                             val age = nextDate?.let { item.birthdayAge(it) }
                             val name = item.title.ifBlank { "生日" }
                             if (age != null) "$name $age 岁" else name
@@ -507,7 +509,6 @@ class LunarWidgetProvider : AppWidgetProvider() {
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
             rv.setViewVisibility(R.id.w_badge, View.GONE)
-            rv.setViewVisibility(R.id.w_separator, View.GONE)
             rv.setViewVisibility(R.id.w_kicker, View.GONE)
             rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(

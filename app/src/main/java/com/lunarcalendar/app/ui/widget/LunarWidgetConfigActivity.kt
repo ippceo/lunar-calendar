@@ -245,9 +245,23 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                                     onValueChange = { customText = it.take(20) },
                                     singleLine = true,
                                     label = { Text("自定义说明") },
-                                    placeholder = { Text("例如：距下次还有 69 天") },
+                                    placeholder = {
+                                        Text(
+                                            if (annivPrimary == LunarWidgetProvider.ANNIV_PASSED) {
+                                                "例如：离纪念日还有 69 天"
+                                            } else {
+                                                "例如：已经走过 1392 天"
+                                            }
+                                        )
+                                    },
                                     supportingText = {
-                                        Text("留空则自动显示「距下次还有 X 天」或「已经走过 X 天」")
+                                        Text(
+                                            if (annivPrimary == LunarWidgetProvider.ANNIV_PASSED) {
+                                                "留空则自动显示「离纪念日还有 X 天」"
+                                            } else {
+                                                "留空则自动显示「已经走过 X 天」"
+                                            }
+                                        )
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
