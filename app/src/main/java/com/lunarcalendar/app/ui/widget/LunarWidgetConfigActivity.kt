@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -78,6 +79,7 @@ class LunarWidgetConfigActivity : ComponentActivity() {
         val initialEventId = LunarWidgetProvider.getEventId(this, widgetId)
         val initialAnniv = LunarWidgetProvider.getAnnivPrimary(this, widgetId)
         val initialLayout = LunarWidgetProvider.getLayoutMode(this, widgetId)
+        val initialCustomText = LunarWidgetProvider.getCustomText(this, widgetId)
         val events = EventRepository.load(this).filter { it.enabled }
         val now = ZonedDateTime.now()
 
@@ -91,6 +93,7 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                     var eventId by remember { mutableStateOf(initialEventId) }
                     var annivPrimary by remember { mutableStateOf(initialAnniv) }
                     var layoutMode by remember { mutableStateOf(initialLayout) }
+                    var customText by remember { mutableStateOf(initialCustomText) }
 
                     LazyColumn(
                         modifier = Modifier
@@ -234,13 +237,30 @@ class LunarWidgetConfigActivity : ComponentActivity() {
                                     onClick = { annivPrimary = LunarWidgetProvider.ANNIV_REMAINING }
                                 )
                             }
+                            item { HorizontalDivider(Modifier.padding(vertical = 4.dp)) }
+                            item { SectionTitle("卡片文案（可选）") }
+                            item {
+                                OutlinedTextField(
+                                    value = customText,
+                                    onValueChange = { customText = it.take(20) },
+                                    singleLine = true,
+                                    label = { Text("自定义说明") },
+                                    placeholder = { Text("例如：距下次还有 69 天") },
+                                    supportingText = {
+                                        Text("留空则自动显示「距下次还有 X 天」或「已经走过 X 天」")
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                )
+                            }
                         }
 
                         item {
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = {
-                                    saveAndFinish(view, mode, eventId, annivPrimary, layoutMode)
+                                    saveAndFinish(view, mode, eventId, annivPrimary, layoutMode, customText)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -316,11 +336,13 @@ class LunarWidgetConfigActivity : ComponentActivity() {
         mode: String,
         eventId: String?,
         annivPrimary: String,
-        layoutMode: String
+        layoutMode: String,
+        customText: String
     ) {
         LunarWidgetProvider.setViewType(this, widgetId, view)
         LunarWidgetProvider.setAnnivPrimary(this, widgetId, annivPrimary)
         LunarWidgetProvider.setLayoutMode(this, widgetId, layoutMode)
+        LunarWidgetProvider.setCustomText(this, widgetId, customText.trim())
         if (view == LunarWidgetProvider.VIEW_ANNIVERSARY) {
             // 纪念日以上方列表中选择的一条为准
             val fallback = EventRepository.load(this)

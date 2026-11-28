@@ -40,14 +40,22 @@
             android:visibility="gone" />
 
         <TextView
+            android:id="@+id/w_separator"
+            android:layout_width="1dp"
+            android:layout_height="12dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="#DCD6EA"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/w_header"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="7dp"
             android:textSize="13sp"
             android:textColor="#4A4160"
-            android:singleLine="true"
+            android:maxLines="2"
             android:ellipsize="end" />
     </LinearLayout>
 
@@ -62,6 +70,15 @@
             android:layout_gravity="center"
             android:orientation="vertical"
             android:gravity="center_horizontal">
+
+            <TextView
+                android:id="@+id/w_kicker"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#8A8398"
+                android:letterSpacing="0.08"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -98,7 +115,7 @@
                 android:paddingTop="4dp"
                 android:textSize="12sp"
                 android:textColor="#5D5575"
-                android:singleLine="true"
+                android:maxLines="2"
                 android:ellipsize="end"
                 android:visibility="gone" />
         </LinearLayout>

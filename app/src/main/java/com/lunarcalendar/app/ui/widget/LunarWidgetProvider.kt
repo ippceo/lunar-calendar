@@ -60,6 +60,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
                 remove(eventKey(it))
                 remove(annivKey(it))
                 remove(layoutKey(it))
+                remove(customKey(it))
             }
         }
     }
@@ -90,6 +91,7 @@ class LunarWidgetProvider : AppWidgetProvider() {
         fun eventKey(widgetId: Int) = "event_$widgetId"
         fun annivKey(widgetId: Int) = "anniv_$widgetId"
         fun layoutKey(widgetId: Int) = "layout_$widgetId"
+        fun customKey(widgetId: Int) = "custom_$widgetId"
 
         fun setLayoutMode(context: Context, widgetId: Int, mode: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -136,6 +138,16 @@ class LunarWidgetProvider : AppWidgetProvider() {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString(annivKey(widgetId), ANNIV_PASSED) ?: ANNIV_PASSED
 
+        /** 设置页里填写的自定义说明文字；为空时使用默认文案。 */
+        fun setCustomText(context: Context, widgetId: Int, text: String?) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit { if (text.isNullOrBlank()) remove(customKey(widgetId)) else putString(customKey(widgetId), text) }
+        }
+
+        fun getCustomText(context: Context, widgetId: Int): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(customKey(widgetId), "").orEmpty()
+
         fun update(context: Context, awm: AppWidgetManager, widgetId: Int) {
             val viewType = getViewType(context, widgetId)
                 ?: return renderPlaceholder(context, awm, widgetId)
@@ -158,7 +170,19 @@ class LunarWidgetProvider : AppWidgetProvider() {
                 candidates.firstOrNull()
             } ?: return renderEmpty(context, awm, widgetId, viewType)
 
-            renderContent(context, awm, widgetId, selected)
+            // 生日卡在自动模式下，把「下一天过生日」的人合并成一组，最多展示 3 位
+            val birthdayGroup = if (viewType == VIEW_BIRTHDAY && !manual) {
+                val target = Occurrences.nextTrigger(selected)?.toLocalDate()
+                if (target == null) {
+                    listOf(selected)
+                } else {
+                    candidates.filter { Occurrences.nextTrigger(it)?.toLocalDate() == target }
+                }
+            } else {
+                listOf(selected)
+            }
+
+            renderContent(context, awm, widgetId, selected, birthdayGroup)
         }
 
         private fun filterAndSort(events: List<CalEvent>, viewType: String): List<CalEvent> =
@@ -265,6 +289,8 @@ class LunarWidgetProvider : AppWidgetProvider() {
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.VISIBLE)
             rv.setViewVisibility(R.id.w_badge, View.GONE)
+            rv.setViewVisibility(R.id.w_separator, View.GONE)
+            rv.setViewVisibility(R.id.w_kicker, View.GONE)
             rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(R.id.w_header, "拾光")
             rv.setTextViewText(R.id.w_number, "＋")
@@ -317,11 +343,14 @@ class LunarWidgetProvider : AppWidgetProvider() {
             context: Context,
             awm: AppWidgetManager,
             widgetId: Int,
-            event: CalEvent
+            event: CalEvent,
+            birthdayGroup: List<CalEvent>
         ) {
             val rv = RemoteViews(context.packageName, R.layout.widget_main)
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
+            rv.setViewVisibility(R.id.w_separator, View.VISIBLE)
+            rv.setViewVisibility(R.id.w_kicker, View.GONE)
             applyBadge(rv, event.type)
             val now = ZonedDateTime.now()
             val today = now.toLocalDate()
@@ -331,16 +360,28 @@ class LunarWidgetProvider : AppWidgetProvider() {
                     val passed = Occurrences.anniversaryDaysPassed(event, today).coerceAtLeast(0)
                     val remaining = daysUntilNextAnniversary(event, today)
                     val primaryPassed = getAnnivPrimary(context, widgetId) == ANNIV_PASSED
+                    val todayIsAnniversary = remaining == 0L
                     rv.setTextViewText(R.id.w_header, event.title.ifBlank { "纪念日" })
-                    rv.setTextViewText(R.id.w_number, (if (primaryPassed) passed else remaining).toString())
-                    setUnit(rv, "天")
+                    if (!primaryPassed && todayIsAnniversary) {
+                        rv.setViewVisibility(R.id.w_kicker, View.GONE)
+                        rv.setTextViewText(R.id.w_number, "今天")
+                        setUnit(rv, "")
+                    } else {
+                        rv.setViewVisibility(R.id.w_kicker, View.VISIBLE)
+                        rv.setTextViewText(R.id.w_kicker, if (primaryPassed) "已经" else "还有")
+                        rv.setTextViewText(R.id.w_number, (if (primaryPassed) passed else remaining).toString())
+                        setUnit(rv, "天")
+                    }
                     rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
+                    val custom = getCustomText(context, widgetId)
                     rv.setTextViewText(
                         R.id.w_secondary,
-                        when {
-                            remaining == 0L -> "今天就是纪念日"
-                            primaryPassed -> "还有 $remaining 天"
-                            else -> "已经 $passed 天"
+                        custom.ifBlank {
+                            when {
+                                todayIsAnniversary -> "今天就是纪念日"
+                                primaryPassed -> "距下次还有 $remaining 天"
+                                else -> "已经走过 $passed 天"
+                            }
                         }
                     )
                     rv.setTextViewText(
@@ -379,10 +420,15 @@ class LunarWidgetProvider : AppWidgetProvider() {
                 }
 
                 else -> {
-                    val next = Occurrences.nextTrigger(event, now)
+                    val group = birthdayGroup.ifEmpty { listOf(event) }
+                    val next = Occurrences.nextTrigger(group.first(), now)
                     val nextDate = next?.toLocalDate()
                     val days = nextDate?.let { ChronoUnit.DAYS.between(today, it) }
-                    rv.setTextViewText(R.id.w_header, event.title.ifBlank { "生日" })
+                    val multi = group.size > 1
+                    rv.setTextViewText(
+                        R.id.w_header,
+                        if (multi) "${group.size} 人同日" else event.title.ifBlank { "生日" }
+                    )
                     when {
                         days == null -> {
                             rv.setTextViewText(R.id.w_number, "—")
@@ -404,15 +450,26 @@ class LunarWidgetProvider : AppWidgetProvider() {
                             setUnit(rv, "天后")
                         }
                     }
-                    val age = nextDate?.let { event.birthdayAge(it) }
-                    if (age != null) {
+                    if (multi) {
+                        val shown = group.take(3)
+                        val text = shown.joinToString(" / ") { item ->
+                            val age = nextDate?.let { item.birthdayAge(it) }
+                            val name = item.title.ifBlank { "生日" }
+                            if (age != null) "$name $age 岁" else name
+                        } + if (group.size > 3) " 等" else ""
                         rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
-                        rv.setTextViewText(R.id.w_secondary, "$age 岁生日")
+                        rv.setTextViewText(R.id.w_secondary, text)
                     } else {
-                        rv.setViewVisibility(R.id.w_secondary, View.GONE)
+                        val age = nextDate?.let { event.birthdayAge(it) }
+                        if (age != null) {
+                            rv.setViewVisibility(R.id.w_secondary, View.VISIBLE)
+                            rv.setTextViewText(R.id.w_secondary, "$age 岁生日")
+                        } else {
+                            rv.setViewVisibility(R.id.w_secondary, View.GONE)
+                        }
                     }
                     val footer = when {
-                        event.type == EventType.YEARLY_LUNAR ->
+                        !multi && event.type == EventType.YEARLY_LUNAR ->
                             "农历${LunarUtils.monthLabelOf(event.month)}${LunarUtils.dayNameOf(event.day)}"
 
                         nextDate != null ->
@@ -450,6 +507,8 @@ class LunarWidgetProvider : AppWidgetProvider() {
             rv.setOnClickPendingIntent(R.id.w_root, configIntent(context, widgetId))
             rv.setViewVisibility(R.id.w_icon, View.GONE)
             rv.setViewVisibility(R.id.w_badge, View.GONE)
+            rv.setViewVisibility(R.id.w_separator, View.GONE)
+            rv.setViewVisibility(R.id.w_kicker, View.GONE)
             rv.setViewVisibility(R.id.w_secondary, View.GONE)
             rv.setTextViewText(
                 R.id.w_header,
